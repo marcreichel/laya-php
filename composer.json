@@ -1,0 +1,51 @@
+{
+    "name": "marcreichel/laya-php",
+    "description": "PHP SDK for Laya, the multilingual single-pass decision engine (via laya-serve).",
+    "type": "library",
+    "license": "Apache-2.0",
+    "keywords": ["laya", "classification", "decisions", "nlp", "sdk"],
+    "authors": [
+        {
+            "name": "Marc Reichel"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "php-http/discovery": "^1.19",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^1.1 || ^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "MarcReichel\\Laya\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MarcReichel\\Laya\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:integration": "pest --group=integration",
+        "analyse": "phpstan analyse",
+        "lint": "pint --test",
+        "format": "pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require-dev": {
+        "guzzlehttp/guzzle": "^8.2",
+        "laravel/pint": "^1.32",
+        "pestphp/pest": "^5.2",
+        "phpstan/phpstan": "^2.2"
+    }
+}

@@ -1,0 +1,197 @@
+# laya-php
+
+A PHP SDK for [Laya](https://github.com/NandhaKishorM/laya), the multilingual decision engine that answers typed questions (`choice`, `score`, yes/no) about any text in a single forward pass, in 100+ languages.
+
+Laya runs in Python, so this SDK talks to [`laya-serve`](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md), Laya's HTTP server, over any PSR-18 client.
+
+```php
+$triage = $laya->decide('Hi, we were billed twice for March. Refund it today or we cancel.', Triage::class);
+
+$triage->department; // Department::Billing
+$triage->churn;      // true
+```
+
+## Installation
+
+```bash
+composer require marcreichel/laya-php
+```
+
+PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
+
+To run `laya-serve` locally, use the `compose.yaml` in this repository or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+
+```bash
+docker compose up -d --wait   # http://localhost:8000
+```
+
+## Asking questions
+
+```php
+use MarcReichel\Laya\Laya;
+use MarcReichel\Laya\Question;
+
+$laya = new Laya('http://localhost:8000', apiKey: getenv('LAYA_API_KEY') ?: null);
+
+$result = $laya->predict($ticketText, [
+    'department' => Question::choice('Which department should handle this?', [
+        'billing'   => 'invoices, payments, refunds',
+        'technical' => 'bugs, outages, system errors',
+        'other'     => 'everything else',
+    ]),
+    'urgency'    => Question::score('How urgent is this?', ['not urgent', 'soon', 'blocking']),
+    'churn_risk' => Question::yesNo('Does the user threaten to cancel or leave?'),
+]);
+
+$result->choice('department')->choice;        // 'billing'
+$result->choice('department')->probabilities; // ['billing' => 0.91, 'technical' => 0.06, 'other' => 0.03]
+$result->score('urgency')->level();           // 2: the most likely level
+$result->score('urgency')->label();           // 'blocking'
+$result->score('urgency')->score;             // 1.74: the expected level
+$result->yesNo('churn_risk')->yes();          // true
+$result->yesNo('churn_risk')->probability;    // 0.83
+
+$result['department'];  // ArrayAccess works too (returns the base Answer type)
+$result->routedModel;   // 'english': the checkpoint laya picked
+```
+
+The three question types:
+
+| Factory | Options | Answer |
+|---|---|---|
+| `Question::choice($instructions, $options)` | a list of labels, or `label => description` | `ChoiceAnswer`: `choice`, `probabilities`, `is($label)` |
+| `Question::score($instructions, $levels)` | level descriptions, lowest first | `ScoreAnswer`: `score`, `level()`, `label()`, `probabilities`, `legend` |
+| `Question::yesNo($instructions, yes: …, no: …)` | optional descriptions of yes and no | `YesNoAnswer`: `probability`, `yes($threshold = 0.5)`, `no()` |
+
+Every answer also has `confidence` and `answerConfidence`. `answerConfidence` is the calibrated one and is comparable across question types, so use it to decide when to trust an answer:
+
+```php
+if ($result->choice('department')->answerConfidence < 0.7) {
+    $ticket->sendToHumanTriage();
+}
+```
+
+### State
+
+`state` can be a string, an array (a JSON document, or a list of conversation turns), or any `JsonSerializable`, such as your own models:
+
+```php
+$laya->predict(['subject' => $mail->subject, 'body' => $mail->body], $questions);
+```
+
+### Picking a checkpoint
+
+By default, laya's router picks a checkpoint by language. To pin one:
+
+```php
+use MarcReichel\Laya\Model;
+
+$laya->predict($text, $questions, model: Model::Multilingual);
+```
+
+## Decisions into objects
+
+Describe the decision as a class, and `decide()` asks its questions and gives you an instance back:
+
+```php
+use MarcReichel\Laya\Attributes\Ask;
+use MarcReichel\Laya\Attributes\Describe;
+use MarcReichel\Laya\Attributes\Levels;
+
+enum Department: string
+{
+    #[Describe('invoices, payments, refunds')]
+    case Billing = 'billing';
+
+    #[Describe('bugs, outages, system errors')]
+    case Technical = 'technical';
+
+    case Other = 'other';
+}
+
+final readonly class Triage
+{
+    public function __construct(
+        #[Ask('Which department should handle this?')]
+        public Department $department,
+
+        #[Ask('How urgent is this?'), Levels('not urgent', 'soon', 'blocking')]
+        public int $urgency,
+
+        #[Ask('Does the user threaten to cancel or leave?')]
+        public bool $churn,
+    ) {}
+}
+
+$triage = $laya->decide($ticketText, Triage::class); // Triage
+```
+
+| Constructor parameter | Question | Value |
+|---|---|---|
+| backed enum | choice (case values are the options; `#[Describe]` adds descriptions) | the most likely case |
+| `bool` | yes/no | `true` when P(yes) ≥ 0.5 |
+| `int` with `#[Levels(...)]` | score | the most likely level index |
+
+Every parameter needs `#[Ask]`. Any other type throws an `InvalidQuestionException` that names the parameter. When you need confidences, use `predict()`.
+
+## Errors
+
+Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`.
+
+| Exception | When |
+|---|---|
+| `InvalidQuestionException` | a question or decision class is malformed; thrown before any request is sent |
+| `ValidationException` | laya rejected the request (400/413/422); the message names the problem |
+| `AuthenticationException` | wrong or missing API key (401) |
+| `ServerBusyException` | laya-serve is at its concurrency limit (503); safe to retry |
+| `ServerException` | any other error status, or a response that isn't laya-shaped |
+| `TransportException` | laya-serve couldn't be reached |
+
+The SDK doesn't retry. For retries, pass an HTTP client that has them, such as Symfony's `RetryableHttpClient` or Guzzle with retry middleware:
+
+```php
+use Symfony\Component\HttpClient\{HttpClient, Psr18Client, RetryableHttpClient};
+
+$laya = new Laya('http://laya:8000', httpClient: new Psr18Client(new RetryableHttpClient(HttpClient::create())));
+```
+
+## Testing your code
+
+`Laya::fake()` returns a client that answers from values you register, with no server involved:
+
+```php
+$laya = Laya::fake([
+    'department' => Department::Billing, // or 'billing'
+    'urgency'    => 2,                   // level index
+    'churn'      => true,                // or a probability, e.g. 0.3
+]);
+
+// ... run the code under test with $laya ...
+
+$laya->assertPredictedCount(1);
+$laya->assertPredicted(fn ($state, array $questions, ?string $model) => str_contains($state, 'refund'));
+$laya->assertNothingPredicted();
+```
+
+If code asks a question you didn't register, or gives an answer that isn't one of the question's options, the fake throws.
+
+## Limitations
+
+- **One request per prediction.** `laya-serve` has no batch endpoint and runs one inference at a time, so loop over your inputs.
+- **No `max_len`.** `laya-serve` doesn't expose it. Long documents are cut off at the checkpoint's default length (512 or 1,024 tokens).
+- **Server limits.** `laya-serve` caps requests at 64 questions, 50,000 characters of state, 100 choice options and 32 score levels.
+
+## Development
+
+```bash
+composer test       # Pest
+composer analyse    # PHPStan (max)
+composer lint       # Pint
+
+docker compose up -d --wait
+LAYA_URL=http://localhost:8000 composer test:integration
+```
+
+## License
+
+Apache-2.0

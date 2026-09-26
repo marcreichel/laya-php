@@ -1,0 +1,30 @@
+# A local laya-serve built from upstream's Dockerfile (CPU torch).
+#
+#   docker compose up -d --wait        # first build takes a while
+#   LAYA_URL=http://localhost:8000 composer test:integration
+#
+# The first request per checkpoint downloads its weights (~1 GB) into the model-cache volume.
+# Set LAYA_PRELOAD=1 to download and load them at startup instead.
+services:
+  laya-serve:
+    build:
+      context: https://github.com/NandhaKishorM/laya.git#main
+    command: ["laya-serve"]
+    ports:
+      - "127.0.0.1:${LAYA_PORT:-8000}:8000"
+    environment:
+      LAYA_DEVICE: cpu
+      LAYA_PRELOAD: "${LAYA_PRELOAD:-0}"
+      LAYA_API_KEY: "${LAYA_API_KEY:-}"
+      OMP_NUM_THREADS: "${OMP_NUM_THREADS:-4}"
+    volumes:
+      - model-cache:/home/laya/.cache/huggingface
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 30s
+      start_period: 10m
+      start_interval: 2s
+
+volumes:
+  model-cache:
