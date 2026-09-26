@@ -5,3 +5,4 @@
 /compose.yaml export-ignore
 /phpstan.neon export-ignore
 /phpunit.xml export-ignore
+/examples export-ignore

@@ -25,6 +25,8 @@ To run `laya-serve` locally, use the `compose.yaml` in this repository or follow
 docker compose up -d --wait   # http://localhost:8000
 ```
 
+Runnable scripts are in [`examples/`](examples). Set `LAYA_URL` (and `LAYA_API_KEY`) if your server isn't on `localhost:8000`. `05-testing-with-fake.php` runs without a server.
+
 ## Asking questions
 
 ```php
