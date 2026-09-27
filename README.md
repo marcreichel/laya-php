@@ -1,4 +1,4 @@
-![laya-php: typed text decisions for PHP](.github/header.svg)
+![laya-php: typed text decisions for PHP](https://raw.githubusercontent.com/marcreichel/laya-php/main/.github/header.svg)
 
 <p align="center">
   <a href="https://github.com/marcreichel/laya-php/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/marcreichel/laya-php/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI"></a>
