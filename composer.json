@@ -3,7 +3,7 @@
     "description": "Self-hosted multilingual text classification for PHP: typed decisions from Laya (via laya-serve), no LLM API needed.",
     "type": "library",
     "license": "Apache-2.0",
-    "keywords": ["laya", "classification", "text-classification", "zero-shot", "decisions", "nlp", "ai", "llm", "machine-learning", "multilingual", "sentiment", "ticket-triage", "sdk", "psr-18"],
+    "keywords": ["laya", "jev", "jev-ai", "jev-api", "systemone", "classification", "text-classification", "zero-shot", "decisions", "nlp", "ai", "llm", "machine-learning", "multilingual", "sentiment", "ticket-triage", "sdk", "psr-18"],
     "authors": [
         {
             "name": "Marc Reichel"

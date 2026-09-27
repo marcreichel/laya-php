@@ -24,6 +24,8 @@ $triage->churn;      // true
 
 Under the hood this is an SDK for [Laya](https://github.com/NandhaKishorM/laya), a multilingual decision engine that answers typed questions (`choice`, `score`, yes/no) about any text in a single forward pass. Laya runs in Python, so the SDK talks to [`laya-serve`](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md), Laya's HTTP server, over any PSR-18 client.
 
+**Looking for Jev?** `laya-serve` speaks the same `POST /v1/systemone` protocol as TypeSafe's hosted [Jev](https://github.com/NandhaKishorM/laya#self-hosting-http-server-jev-compatible) API, with the same `choice`/`score`/`noul` answers, so this package is also a self-hosted Jev AI alternative for PHP. It targets `laya-serve` and hasn't been tested against the hosted Jev API.
+
 ## Installation
 
 ```bash
