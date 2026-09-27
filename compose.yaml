@@ -9,7 +9,7 @@
 services:
   laya-serve:
     build:
-      context: https://github.com/NandhaKishorM/laya.git#4066d5d5fbf08b66c6757ddeedbd797bd7655bc0
+      context: https://github.com/NandhaKishorM/laya.git#9d955671415fc19f069b9cc998928075c1f255ec
     command: ["laya-serve"]
     ports:
       - "127.0.0.1:${LAYA_PORT:-8000}:8000"

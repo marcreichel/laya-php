@@ -95,8 +95,10 @@ final class Laya
      * @param  string|array<mixed>|\JsonSerializable  $state  text, a JSON document, or a list of conversation turns
      * @param  array<string, Question>  $questions  question id => question
      * @param  Model|null  $model  pin a checkpoint; null lets laya's router pick by language
+     * @param  int|null  $maxLen  token budget for the state; longer states are cut off (laya-serve >= 0.3.21)
+     * @param  int|null  $headMaxLen  token budget for each question and its options (laya-serve >= 0.3.21)
      */
-    public function predict(string|array|\JsonSerializable $state, array $questions, ?Model $model = null): Result
+    public function predict(string|array|\JsonSerializable $state, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): Result
     {
         $wire = [];
         foreach ($questions as $id => $question) {
@@ -113,9 +115,16 @@ final class Laya
         if ($model !== null) {
             $body['model'] = $model->value;
         }
+        // laya-serve validates both (positive, <= LAYA_MAX_TOKEN_BUDGET) and answers 422.
+        if ($maxLen !== null) {
+            $body['max_len'] = $maxLen;
+        }
+        if ($headMaxLen !== null) {
+            $body['head_max_len'] = $headMaxLen;
+        }
 
         $json = json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
-        // ponytail: the key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
+        // The key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
         $key = 'laya.'.hash('xxh128', $json);
         $cached = $this->cache?->get($key);
         if (is_array($cached)) {
@@ -151,9 +160,9 @@ final class Laya
      * @param  class-string<T>  $class
      * @return T
      */
-    public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null): object
+    public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): object
     {
-        return DecisionMapper::hydrate($class, $this->predict($state, DecisionMapper::questions($class), $model));
+        return DecisionMapper::hydrate($class, $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen));
     }
 
     public function health(): HealthStatus

@@ -87,6 +87,14 @@ it('maps a numeric choice onto a string-backed enum', function () {
     expect($coded->code)->toBe(Code::Two);
 });
 
+it('forwards the model and token budgets', function () {
+    $sent = [];
+    layaRespondingWith(200, ['answers' => ['code' => ['type' => 'choice', 'choice' => 2]]], $sent)
+        ->decide('x', Coded::class, Model::English, maxLen: 2048, headMaxLen: 256);
+
+    expect(json_decode((string) $sent[0]->getBody(), true))->toMatchArray(['model' => 'english', 'max_len' => 2048, 'head_max_len' => 256]);
+});
+
 it('keeps #[Levels] a list, even from named arguments', function () {
     expect(new Levels(...['low' => 'low', 'high' => 'high'])->levels)->toBe(['low', 'high']);
 });

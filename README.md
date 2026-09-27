@@ -38,7 +38,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`4066d5d`](https://github.com/NandhaKishorM/laya/commit/4066d5d5fbf08b66c6757ddeedbd797bd7655bc0)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`9d95567`](https://github.com/NandhaKishorM/laya/commit/9d955671415fc19f069b9cc998928075c1f255ec)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
@@ -152,6 +152,17 @@ use MarcReichel\Laya\Model;
 
 $laya->predict($text, $questions, model: Model::Multilingual);
 ```
+
+### Long documents
+
+Laya cuts the state off at the checkpoint's default length (512 or 1,024 tokens). With laya-serve 0.3.21 or later you can raise it per request with `maxLen`, and give questions with many or long options more room with `headMaxLen`:
+
+```php
+$laya->predict($contract, $questions, maxLen: 4096);
+$laya->decide($ticket, Triage::class, headMaxLen: 384);
+```
+
+laya-serve caps both at `LAYA_MAX_TOKEN_BUDGET` (8,192 by default) and answers anything above it with a `ValidationException`.
 
 ## Decisions into objects
 
@@ -308,7 +319,7 @@ $lead->hot   = $result->score('intent')->level() === 3 && $result->yesNo('budget
 
 ## Caching
 
-Laya gives the same answer to the same input, so you can skip repeat requests with any PSR-16 cache. The key covers the state, the questions and the pinned model:
+Laya gives the same answer to the same input, so you can skip repeat requests with any PSR-16 cache. The key covers the state, the questions, the pinned model and the token budgets:
 
 ```php
 $laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400);
@@ -371,8 +382,7 @@ If code asks a question you didn't register, or gives an answer that isn't one o
 ## Limitations
 
 - **One request per prediction.** `laya-serve` has no batch endpoint and runs one inference at a time, so loop over your inputs.
-- **No `max_len`.** `laya-serve` doesn't expose it. Long documents are cut off at the checkpoint's default length (512 or 1,024 tokens).
-- **Server limits.** `laya-serve` caps requests at 64 questions, 50,000 characters of state, 100 choice options and 32 score levels.
+- **Server limits.** `laya-serve` caps requests at 64 questions, 50,000 characters of state, 100 choice options, 32 score levels and 512 answer options in total.
 
 ## Development
 

@@ -72,6 +72,18 @@ it('leaves the model out so laya routes by language', function () {
         ->and($sent[0]->hasHeader('Authorization'))->toBeFalse();
 });
 
+it('sends token budgets only when set', function () {
+    $sent = [];
+    $laya = layaRespondingWith(200, LAYA_RESPONSE, $sent);
+    $laya->predict('Billed twice', questions(), maxLen: 2048, headMaxLen: 256);
+    $laya->predict('Billed twice', questions());
+
+    $withBudget = json_decode((string) $sent[0]->getBody(), true);
+    expect($withBudget['max_len'])->toBe(2048)
+        ->and($withBudget['head_max_len'])->toBe(256)
+        ->and(json_decode((string) $sent[1]->getBody(), true))->not->toHaveKeys(['max_len', 'head_max_len']);
+});
+
 it('maps every answer type onto typed answers', function () {
     $result = layaRespondingWith(200, LAYA_RESPONSE)->predict('Billed twice', questions());
 
