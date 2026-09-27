@@ -1,8 +1,12 @@
 # laya-php
 
-A PHP SDK for [Laya](https://github.com/NandhaKishorM/laya), the multilingual decision engine that answers typed questions (`choice`, `score`, yes/no) about any text in a single forward pass, in 100+ languages.
+[![CI](https://github.com/marcreichel/laya-php/actions/workflows/ci.yml/badge.svg)](https://github.com/marcreichel/laya-php/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/packagist/v/marcreichel/laya-php)](https://packagist.org/packages/marcreichel/laya-php)
+[![PHP Version](https://img.shields.io/packagist/dependency-v/marcreichel/laya-php/php)](https://packagist.org/packages/marcreichel/laya-php)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen)](phpstan.neon)
+[![License](https://img.shields.io/packagist/l/marcreichel/laya-php)](LICENSE)
 
-Laya runs in Python, so this SDK talks to [`laya-serve`](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md), Laya's HTTP server, over any PSR-18 client.
+**Classify text in PHP without paying for an LLM API.** Route support tickets, spot churn risk and score urgency, in 100+ languages, on your own server, and get the answers back as typed enums, ints and bools.
 
 ```php
 $triage = $laya->decide('Hi, we were billed twice for March. Refund it today or we cancel.', Triage::class);
@@ -10,6 +14,13 @@ $triage = $laya->decide('Hi, we were billed twice for March. Refund it today or 
 $triage->department; // Department::Billing
 $triage->churn;      // true
 ```
+
+- **Self-hosted:** the text never leaves your infrastructure, and you pay no per-token fees.
+- **Typed:** describe a decision as a readonly class with enums and get an instance back.
+- **Calibrated:** every answer has a confidence you can threshold on to send unsure cases to a human.
+- **Testable:** a built-in fake lets you unit-test without a running server.
+
+Under the hood this is an SDK for [Laya](https://github.com/NandhaKishorM/laya), a multilingual decision engine that answers typed questions (`choice`, `score`, yes/no) about any text in a single forward pass. Laya runs in Python, so the SDK talks to [`laya-serve`](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md), Laya's HTTP server, over any PSR-18 client.
 
 ## Installation
 
