@@ -192,7 +192,38 @@ $triage = $laya->decide($ticketText, Triage::class); // Triage
 | `bool` | yes/no | `true` when P(yes) ≥ 0.5 |
 | `int` with `#[Levels(...)]` | score | the most likely level index |
 
-Every parameter needs `#[Ask]`. Any other type throws an `InvalidQuestionException` that names the parameter. When you need confidences, use `predict()`.
+Every parameter needs `#[Ask]`. Any other type throws an `InvalidQuestionException` that names the parameter.
+
+`#[Ask]` takes a few options on top of the question:
+
+```php
+final readonly class Triage
+{
+    public function __construct(
+        // null when the calibrated confidence is below 0.7, so you can hand the ticket to a human
+        #[Ask('Which department should handle this?', minConfidence: 0.7)]
+        public ?Department $department,
+
+        // bools can describe yes and no, and pick the P(yes) from which they are true
+        #[Ask('Does the user threaten to cancel or leave?', yes: 'says they will cancel or switch', threshold: 0.3)]
+        public bool $churn,
+    ) {}
+}
+
+$triage = $laya->decide($ticketText, Triage::class);
+
+if ($triage->department === null) {
+    $ticket->sendToHumanTriage();
+}
+```
+
+| Option | Applies to | Effect |
+|---|---|---|
+| `minConfidence` | any nullable parameter | `null` when `answerConfidence` is below it |
+| `yes`, `no` | `bool` | describe what yes and no mean |
+| `threshold` | `bool` | `true` when P(yes) ≥ threshold (default 0.5) |
+
+For the full probabilities, use `predict()`.
 
 ## Recipes
 

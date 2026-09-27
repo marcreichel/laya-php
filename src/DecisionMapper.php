@@ -13,6 +13,7 @@ use MarcReichel\Laya\Exceptions\InvalidQuestionException;
  * Turns a decision class's constructor into questions, and a Result back into an instance.
  *
  * Mapping: backed enum => choice, bool => yes/no, int + #[Levels] => score.
+ * A nullable parameter with #[Ask(minConfidence: ...)] is null when laya is unsure.
  *
  * @internal
  */
@@ -44,8 +45,14 @@ final class DecisionMapper
         foreach (self::parameters($class) as $parameter) {
             $name = $parameter->getName();
             $type = self::typeName($class, $parameter);
+            $ask = self::ask($class, $parameter);
+            if ($ask->minConfidence !== null && $result->get($name)->answerConfidence < $ask->minConfidence) {
+                $arguments[$name] = null;
+
+                continue;
+            }
             $arguments[$name] = match ($type) {
-                'bool' => $result->yesNo($name)->yes(),
+                'bool' => $result->yesNo($name)->yes($ask->threshold),
                 'int' => $result->score($name)->level(),
                 default => self::enumCase($type, $result->choice($name)->choice),
             };
@@ -70,12 +77,19 @@ final class DecisionMapper
 
     private static function question(string $class, \ReflectionParameter $parameter): Question
     {
-        $ask = self::attribute($parameter, Ask::class)
-            ?? throw new InvalidQuestionException(sprintf('%s::$%s needs an #[Ask(...)] attribute with the question for the model.', $class, $parameter->getName()));
+        $ask = self::ask($class, $parameter);
         $type = self::typeName($class, $parameter);
 
+        if ($ask->minConfidence !== null && ! $parameter->allowsNull()) {
+            throw new InvalidQuestionException(sprintf('%s::$%s sets minConfidence, so it must be nullable (?%s) to hold "unsure".', $class, $parameter->getName(), $type));
+        }
+
         if ($type === 'bool') {
-            return Question::yesNo($ask->instructions);
+            return Question::yesNo($ask->instructions, $ask->yes, $ask->no);
+        }
+
+        if ($ask->yes !== null || $ask->no !== null || $ask->threshold !== 0.5) {
+            throw new InvalidQuestionException(sprintf('%s::$%s is not a bool, so #[Ask] can\'t take yes, no or threshold.', $class, $parameter->getName()));
         }
 
         if ($type === 'int') {
@@ -101,6 +115,12 @@ final class DecisionMapper
             '%s::$%s has type %s; laya answers from a fixed option set, so use a backed enum (choice), bool (yes/no) or int with #[Levels] (score).',
             $class, $parameter->getName(), $type,
         ));
+    }
+
+    private static function ask(string $class, \ReflectionParameter $parameter): Ask
+    {
+        return self::attribute($parameter, Ask::class)
+            ?? throw new InvalidQuestionException(sprintf('%s::$%s needs an #[Ask(...)] attribute with the question for the model.', $class, $parameter->getName()));
     }
 
     private static function typeName(string $class, \ReflectionParameter $parameter): string
