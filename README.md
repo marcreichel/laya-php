@@ -149,6 +149,83 @@ $triage = $laya->decide($ticketText, Triage::class); // Triage
 
 Every parameter needs `#[Ask]`. Any other type throws an `InvalidQuestionException` that names the parameter. When you need confidences, use `predict()`.
 
+## Recipes
+
+### Routing incoming email
+
+Pass the email as a document and give unsure answers to a human. German, Spanish or Hindi emails work the same way, with no extra setup.
+
+```php
+$result = $laya->predict([
+    'from'    => $mail->from,
+    'subject' => $mail->subject,
+    'body'    => $mail->body,
+], [
+    'team' => Question::choice('Which team should answer this email?', [
+        'sales'   => 'pricing, quotes, new contracts',
+        'support' => 'problems using the product',
+        'billing' => 'invoices, payments, refunds',
+        'spam'    => 'newsletters, cold outreach, phishing',
+    ]),
+]);
+
+$team = $result->choice('team');
+
+$inbox->assign($mail, $team->answerConfidence >= 0.7 ? $team->choice : 'triage');
+```
+
+### Moderating reviews
+
+Hold abusive or spam reviews back before they are published, and record the sentiment while you're at it.
+
+```php
+enum Sentiment: string
+{
+    case Positive = 'positive';
+    case Neutral = 'neutral';
+    case Negative = 'negative';
+}
+
+final readonly class Moderation
+{
+    public function __construct(
+        #[Ask('Does the review contain insults, hate speech or threats?')]
+        public bool $abusive,
+
+        #[Ask('Is this spam or an advertisement rather than a real review?')]
+        public bool $spam,
+
+        #[Ask('What is the overall sentiment of the review?')]
+        public Sentiment $sentiment,
+    ) {}
+}
+
+$moderation = $laya->decide($review->body, Moderation::class);
+
+if ($moderation->abusive || $moderation->spam) {
+    $review->holdForModeration();
+}
+```
+
+### Scoring leads
+
+A score question's `score` is the expected level, a float, so leads with the same most likely level still sort cleanly.
+
+```php
+$result = $laya->predict($lead->message, [
+    'intent' => Question::score('How ready is this person to buy?', [
+        'just browsing',
+        'researching options',
+        'comparing vendors',
+        'ready to buy',
+    ]),
+    'budget' => Question::yesNo('Does the message mention a budget, a timeline or a team size?'),
+]);
+
+$lead->score = $result->score('intent')->score; // 0.0 to 3.0
+$lead->hot   = $result->score('intent')->level() === 3 && $result->yesNo('budget')->yes();
+```
+
 ## Errors
 
 Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`.
