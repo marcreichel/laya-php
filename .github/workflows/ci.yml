@@ -22,3 +22,5 @@ jobs:
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress
       - run: vendor/bin/pest --coverage --min=100
+      - run: vendor/bin/pest --mutate --everything --parallel --min=64
+        if: matrix.php == '8.4'

@@ -42,6 +42,10 @@
             "@putenv XDEBUG_MODE=coverage",
             "pest --coverage --min=100"
         ],
+        "test:mutate": [
+            "@putenv XDEBUG_MODE=coverage",
+            "pest --mutate --everything --parallel --min=64"
+        ],
         "test:integration": "pest --group=integration",
         "analyse": "phpstan analyse",
         "lint": "pint --test",
