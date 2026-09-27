@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in laya-php doesn't work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Code to reproduce
+      description: The smallest snippet that shows the problem. Remove any API keys or private text.
+      render: php
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Error or output
+      description: The exception message and stack trace, or the unexpected result.
+      render: shell
+
+  - type: input
+    id: sdk-version
+    attributes:
+      label: laya-php version
+      placeholder: "1.0.0 (composer show marcreichel/laya-php)"
+    validations:
+      required: true
+
+  - type: input
+    id: server-version
+    attributes:
+      label: laya-serve version or commit
+      description: The Laya tag or commit your server runs, or "compose.yaml from this repo".
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: "8.4.12"
+    validations:
+      required: true
+
+  - type: input
+    id: laravel-version
+    attributes:
+      label: Laravel version
+      description: Leave empty if you don't use Laravel.
+
+  - type: input
+    id: http-client
+    attributes:
+      label: HTTP client
+      placeholder: "guzzlehttp/guzzle 7.9, symfony/http-client 7.3, …"
