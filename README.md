@@ -1,4 +1,4 @@
-# laya-php
+![laya-php: typed text decisions for PHP](.github/header.svg)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/marcreichel/laya-php/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/marcreichel/laya-php/actions/workflows/ci.yml)
 [![Latest Version](https://img.shields.io/packagist/v/marcreichel/laya-php?style=for-the-badge)](https://packagist.org/packages/marcreichel/laya-php)

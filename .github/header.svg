@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" role="img" aria-label="laya-php: typed text decisions for PHP">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.78" cy="0.35" r="0.5">
+      <stop offset="0" stop-color="#6366f1" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a5b4fc"/>
+      <stop offset="1" stop-color="#f0abfc"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="440" rx="24" fill="url(#bg)"/>
+  <rect width="1280" height="440" rx="24" fill="url(#glow)"/>
+
+  <!-- mark: a probability distribution -->
+  <g transform="translate(80 92)">
+    <rect width="64" height="12" rx="6" fill="url(#accent)"/>
+    <rect y="20" width="30" height="12" rx="6" fill="#a5b4fc" opacity="0.6"/>
+    <rect y="40" width="14" height="12" rx="6" fill="#a5b4fc" opacity="0.35"/>
+  </g>
+
+  <g font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="76" y="220" font-size="76" font-weight="800" fill="#f8fafc" letter-spacing="-2">laya<tspan fill="url(#accent)">-php</tspan></text>
+    <text x="80" y="268" font-size="28" font-weight="500" fill="#cbd5e1">Typed text decisions for PHP</text>
+
+    <g font-size="15" font-weight="600" fill="#c7d2fe">
+      <rect x="80" y="304" width="146" height="34" rx="17" fill="#6366f1" fill-opacity="0.18" stroke="#818cf8" stroke-opacity="0.5"/>
+      <text x="153" y="326" text-anchor="middle">100+ languages</text>
+      <rect x="238" y="304" width="122" height="34" rx="17" fill="#6366f1" fill-opacity="0.18" stroke="#818cf8" stroke-opacity="0.5"/>
+      <text x="299" y="326" text-anchor="middle">self-hosted</text>
+      <rect x="372" y="304" width="118" height="34" rx="17" fill="#6366f1" fill-opacity="0.18" stroke="#818cf8" stroke-opacity="0.5"/>
+      <text x="431" y="326" text-anchor="middle">no LLM API</text>
+    </g>
+  </g>
+
+  <!-- code card -->
+  <g transform="translate(600 78)">
+    <rect width="600" height="284" rx="16" fill="#0b1120" fill-opacity="0.85" stroke="#334155"/>
+    <circle cx="28" cy="26" r="6" fill="#f87171"/>
+    <circle cx="48" cy="26" r="6" fill="#fbbf24"/>
+    <circle cx="68" cy="26" r="6" fill="#34d399"/>
+    <text x="300" y="31" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#64748b">triage.php</text>
+    <line x1="0" y1="52" x2="600" y2="52" stroke="#1e293b"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#e2e8f0">
+      <text x="28" y="96"><tspan fill="#93c5fd">$triage</tspan> = <tspan fill="#93c5fd">$laya</tspan>-&gt;<tspan fill="#c4b5fd">decide</tspan>(<tspan fill="#93c5fd">$ticket</tspan>, <tspan fill="#fcd34d">Triage</tspan>::<tspan fill="#f0abfc">class</tspan>);</text>
+      <text x="28" y="152"><tspan fill="#93c5fd">$triage</tspan>-&gt;department;<tspan x="253" fill="#64748b">// </tspan><tspan fill="#86efac">Department::Billing</tspan></text>
+      <text x="28" y="186"><tspan fill="#93c5fd">$triage</tspan>-&gt;urgency;<tspan x="253" fill="#64748b">// </tspan><tspan fill="#86efac">2</tspan></text>
+      <text x="28" y="220"><tspan fill="#93c5fd">$triage</tspan>-&gt;churn;<tspan x="253" fill="#64748b">// </tspan><tspan fill="#86efac">true</tspan></text>
+    </g>
+
+    <!-- department probabilities -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#94a3b8">
+      <rect x="28" y="248" width="400" height="8" rx="4" fill="#1e293b"/>
+      <rect x="28" y="248" width="364" height="8" rx="4" fill="url(#accent)"/>
+      <text x="440" y="257">billing 0.91</text>
+    </g>
+  </g>
+</svg>
