@@ -57,6 +57,8 @@ LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
 ```
 
+`php artisan laya:health` prints the server's status and loaded checkpoints, and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
+
 Inject it wherever you need it:
 
 ```php

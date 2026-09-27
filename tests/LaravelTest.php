@@ -73,3 +73,24 @@ it('does not cache by default, or with an empty store', function () {
     expect((fn () => $this->cache)->call($laya))->toBeNull()
         ->and((fn () => $this->cacheTtl)->call($laya))->toBeNull();
 });
+
+it('reports laya-serve health on the command line', function () {
+    app()->instance(Laya::class, Laya::fake());
+
+    $this->artisan('laya:health')
+        ->expectsOutputToContain('Status')
+        ->expectsOutputToContain('fake')
+        ->expectsOutputToContain('none')
+        ->doesntExpectOutputToContain('unhealthy')
+        ->assertSuccessful();
+});
+
+it('fails the health command when laya-serve is unhealthy or unreachable', function (int $status, array|string $body, string $output) {
+    app()->instance(Laya::class, layaRespondingWith($status, $body));
+
+    $this->artisan('laya:health')->expectsOutputToContain($output)->assertFailed();
+})->with([
+    'unhealthy' => [200, ['status' => 'loading', 'loaded' => ['english', 'multilingual'], 'device' => 'cpu'], 'unhealthy'],
+    'loaded checkpoints' => [200, ['status' => 'loading', 'loaded' => ['english', 'multilingual'], 'device' => 'cpu'], 'english, multilingual'],
+    'error' => [500, ['detail' => 'boom'], 'laya-serve: boom (HTTP 500)'],
+]);

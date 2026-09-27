@@ -38,5 +38,7 @@ final class LayaServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../../config/laya.php' => $this->app->configPath('laya.php'),
         ], 'laya-config');
+
+        $this->commands([HealthCommand::class]);
     }
 }
