@@ -6,6 +6,7 @@ namespace MarcReichel\Laya;
 
 use Http\Discovery\Psr17FactoryDiscovery;
 use Http\Discovery\Psr18ClientDiscovery;
+use Illuminate\Container\Container;
 use MarcReichel\Laya\Exceptions\AuthenticationException;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Exceptions\ServerBusyException;
@@ -61,11 +62,19 @@ final class Laya
      * Choice answers take a label (or backed enum case), score answers a level index,
      * yes/no answers a bool or a probability. An unregistered question throws.
      *
+     * In a Laravel app the fake also replaces the container's Laya, so injected code gets it too.
+     *
      * @param  array<string, string|int|float|bool|\BackedEnum>  $answers
      */
     public static function fake(array $answers = []): self
     {
-        return new self('http://laya.test', httpClient: new FakeHttpClient($answers));
+        $fake = new self('http://laya.test', httpClient: new FakeHttpClient($answers));
+
+        if (class_exists(Container::class) && Container::getInstance()->bound(self::class)) {
+            Container::getInstance()->instance(self::class, $fake);
+        }
+
+        return $fake;
     }
 
     /**

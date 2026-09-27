@@ -16,6 +16,9 @@
         "psr/http-factory": "^1.0",
         "psr/http-message": "^1.1 || ^2.0"
     },
+    "suggest": {
+        "laravel/framework": "The service provider registers Laya from config/laya.php (^11.0, auto-discovered)."
+    },
     "autoload": {
         "psr-4": {
             "MarcReichel\\Laya\\": "src/"
@@ -24,6 +27,13 @@
     "autoload-dev": {
         "psr-4": {
             "MarcReichel\\Laya\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "MarcReichel\\Laya\\Laravel\\LayaServiceProvider"
+            ]
         }
     },
     "scripts": {
@@ -45,6 +55,7 @@
     "require-dev": {
         "guzzlehttp/guzzle": "^8.2",
         "laravel/pint": "^1.32",
+        "orchestra/testbench": "^11.0",
         "pestphp/pest": "^5.2",
         "phpstan/phpstan": "^2.2"
     }

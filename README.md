@@ -40,6 +40,45 @@ docker compose up -d --wait   # http://localhost:8000
 
 Runnable scripts are in [`examples/`](examples). Set `LAYA_URL` (and `LAYA_API_KEY`) if your server isn't on `localhost:8000`. `05-testing-with-fake.php` runs without a server.
 
+### Laravel
+
+The service provider is auto-discovered. It registers `Laya` as a singleton, configured from your `.env`:
+
+```dotenv
+LAYA_URL=http://localhost:8000
+LAYA_API_KEY=
+```
+
+Inject it wherever you need it:
+
+```php
+use MarcReichel\Laya\Laya;
+
+final class ClassifyTicket implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(public Ticket $ticket) {}
+
+    public function handle(Laya $laya): void
+    {
+        $triage = $laya->decide($this->ticket->body, Triage::class);
+
+        $this->ticket->update(['department' => $triage->department]);
+    }
+}
+```
+
+To change the config file, publish it with `php artisan vendor:publish --tag=laya-config`. In tests, `Laya::fake([...])` also replaces the container's instance, so injected code gets the fake (see [Testing your code](#testing-your-code)):
+
+```php
+$laya = Laya::fake(['department' => Department::Billing, 'urgency' => 2, 'churn' => true]);
+
+ClassifyTicket::dispatchSync($ticket);
+
+$laya->assertPredictedCount(1);
+```
+
 ## Asking questions
 
 ```php

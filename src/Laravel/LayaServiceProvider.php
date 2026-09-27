@@ -1,0 +1,37 @@
+<?php
+
+declare(strict_types=1);
+
+namespace MarcReichel\Laya\Laravel;
+
+use Illuminate\Config\Repository;
+use Illuminate\Support\ServiceProvider;
+use MarcReichel\Laya\Laya;
+
+/**
+ * Registers Laya as a singleton configured from config/laya.php. Auto-discovered by Laravel.
+ */
+final class LayaServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->mergeConfigFrom(__DIR__.'/../../config/laya.php', 'laya');
+
+        $this->app->singleton(Laya::class, function (): Laya {
+            $config = $this->app->make(Repository::class);
+            $apiKey = $config->get('laya.api_key');
+
+            return new Laya(
+                $config->string('laya.url'),
+                apiKey: is_string($apiKey) && $apiKey !== '' ? $apiKey : null,
+            );
+        });
+    }
+
+    public function boot(): void
+    {
+        $this->publishes([
+            __DIR__.'/../../config/laya.php' => $this->app->configPath('laya.php'),
+        ], 'laya-config');
+    }
+}
