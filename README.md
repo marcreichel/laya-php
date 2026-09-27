@@ -341,6 +341,17 @@ $laya->assertPredicted(fn ($state, array $questions, ?string $model) => str_cont
 $laya->assertNothingPredicted();
 ```
 
+For decision classes, fake with an instance and assert on the class. A `null` answer (here or in the array form) is an unsure one: even probabilities and zero confidence, so `minConfidence` turns it into `null` again:
+
+```php
+$laya = Laya::fake(new Triage(department: null, churn: true));
+
+// ... run the code under test with $laya ...
+
+$laya->assertDecided(Triage::class);
+$laya->assertDecided(Triage::class, fn ($state, ?string $model) => str_contains($state, 'refund'));
+```
+
 If code asks a question you didn't register, or gives an answer that isn't one of the question's options, the fake throws.
 
 ## Limitations

@@ -90,3 +90,21 @@ it('leaves a container without a Laya binding alone', function () {
     expect(Container::getInstance()->bound(Laya::class))->toBeFalse();
     Container::setInstance(null);
 });
+
+it('answers null as unsure: even probabilities, zero confidence', function () {
+    $result = Laya::fake(['dept' => null, 'urgency' => null, 'churn' => null])->predict('x', [
+        'dept' => Question::choice('Dept?', ['billing', 'other']),
+        'urgency' => Question::score('Urgent?', ['low', 'mid', 'high']),
+        'churn' => Question::yesNo('Cancel?'),
+    ]);
+
+    expect($result->raw['answers'])->toBe([
+        'dept' => ['type' => 'choice', 'choice' => 'billing', 'confidence' => 0.0, 'answer_confidence' => 0.0, 'probabilities' => ['billing' => 0.5, 'other' => 0.5]],
+        'urgency' => ['type' => 'score', 'score' => 1.0, 'confidence' => 0.0, 'answer_confidence' => 0.0, 'legend' => ['low', 'mid', 'high'], 'probabilities' => [1 / 3, 1 / 3, 1 / 3]],
+        'churn' => ['type' => 'noul', 'noul' => 0.5, 'confidence' => 0.0, 'answer_confidence' => 0.0],
+    ]);
+});
+
+it('answers an unsure numeric choice with a string label', function () {
+    expect(Laya::fake(['code' => null])->predict('x', ['code' => Question::choice('Code?', [1, 2])])->choice('code')->choice)->toBe('1');
+});

@@ -7,6 +7,8 @@ use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Laya;
+use MarcReichel\Laya\Model;
+use PHPUnit\Framework\AssertionFailedError;
 
 enum Department: string
 {
@@ -135,3 +137,19 @@ it('rejects #[Ask] options that cannot apply', function (object $dto, string $me
         public function __construct(#[Ask('Dept?', threshold: 0.4)] public Department $d) {}
     }, 'is not a bool'],
 ]);
+
+it('fakes answers from a decision object, including unsure ones', function () {
+    $laya = Laya::fake(new Gated(null, null, null));
+
+    expect($laya->decide('x', Gated::class))->toEqual(new Gated(null, null, null));
+});
+
+it('asserts a decision class was decided', function () {
+    $laya = Laya::fake(new Triage(Department::Billing, 2, true, Priority::High));
+    $laya->decide('Refund me.', Triage::class, Model::English);
+
+    expect(fn () => $laya->assertDecided(Triage::class))->not->toThrow(AssertionFailedError::class)
+        ->and(fn () => $laya->assertDecided(Triage::class, fn ($state, $model) => $state === 'Refund me.' && $model === 'english'))->not->toThrow(AssertionFailedError::class)
+        ->and(fn () => $laya->assertDecided(Triage::class, fn ($state) => $state === 'other'))->toThrow(AssertionFailedError::class, 'Expected Triage to be decided')
+        ->and(fn () => $laya->assertDecided(Gated::class))->toThrow(AssertionFailedError::class);
+});

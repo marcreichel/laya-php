@@ -21,7 +21,7 @@ final class FakeHttpClient implements ClientInterface
     /** @var list<array{state: mixed, questions: array<array-key, mixed>, model: ?string}> */
     public private(set) array $requests = [];
 
-    /** @param array<string, string|int|float|bool|\BackedEnum> $answers */
+    /** @param array<string, string|int|float|bool|\BackedEnum|null> $answers */
     public function __construct(private readonly array $answers) {}
 
     public function sendRequest(RequestInterface $request): ResponseInterface
@@ -57,10 +57,14 @@ final class FakeHttpClient implements ClientInterface
      * @param  array<mixed>  $question
      * @return array<string, mixed>
      */
-    private function answer(string $id, array $question, string|int|float|bool|\BackedEnum $value): array
+    private function answer(string $id, array $question, string|int|float|bool|\BackedEnum|null $value): array
     {
         $value = $value instanceof \BackedEnum ? $value->value : $value;
         $criteria = self::array($question['criteria'] ?? []);
+
+        if ($value === null) {
+            return $this->unsure($question, $criteria);
+        }
 
         switch ($question['type'] ?? null) {
             case 'choice':
@@ -89,6 +93,26 @@ final class FakeHttpClient implements ClientInterface
 
                 return ['type' => 'noul', 'noul' => $p, 'confidence' => max($p, 1 - $p), 'answer_confidence' => max($p, 1 - $p)];
         }
+    }
+
+    /**
+     * null means "laya isn't sure": even probabilities and zero confidence.
+     *
+     * @param  array<mixed>  $question
+     * @param  array<mixed>  $criteria
+     * @return array<string, mixed>
+     */
+    private function unsure(array $question, array $criteria): array
+    {
+        $none = ['confidence' => 0.0, 'answer_confidence' => 0.0];
+
+        return match ($question['type'] ?? null) {
+            'choice' => ['type' => 'choice', 'choice' => (string) array_key_first($criteria)] + $none
+                + ['probabilities' => array_fill_keys(array_keys($criteria), 1 / count($criteria))],
+            'score' => ['type' => 'score', 'score' => (count($criteria) - 1) / 2.0] + $none
+                + ['legend' => $criteria, 'probabilities' => array_fill(0, count($criteria), 1 / count($criteria))],
+            default => ['type' => 'noul', 'noul' => 0.5] + $none,
+        };
     }
 
     /** @return array<mixed> */

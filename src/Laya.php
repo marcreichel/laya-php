@@ -60,14 +60,21 @@ final class Laya
      *     $laya = Laya::fake(['department' => 'billing', 'urgency' => 2, 'churn' => true]);
      *
      * Choice answers take a label (or backed enum case), score answers a level index,
-     * yes/no answers a bool or a probability. An unregistered question throws.
+     * yes/no answers a bool or a probability, and null means laya is unsure (zero confidence).
+     * An unregistered question throws.
+     *
+     * Or pass an instance of a decision class, and its properties become the answers:
+     *
+     *     $laya = Laya::fake(new Triage(Department::Billing, urgency: 2, churn: true));
      *
      * In a Laravel app the fake also replaces the container's Laya, so injected code gets it too.
      *
-     * @param  array<string, string|int|float|bool|\BackedEnum>  $answers
+     * @param  array<string, string|int|float|bool|\BackedEnum|null>|object  $answers
      */
-    public static function fake(array $answers = []): self
+    public static function fake(array|object $answers = []): self
     {
+        /** @var array<string, string|int|float|bool|\BackedEnum|null> $answers */
+        $answers = is_object($answers) ? get_object_vars($answers) : $answers;
         $fake = new self('http://laya.test', httpClient: new FakeHttpClient($answers));
 
         if (class_exists(Container::class) && Container::getInstance()->bound(self::class)) {
@@ -146,6 +153,19 @@ final class Laya
     {
         $matching = array_filter($this->fakeClient()->requests, fn (array $r) => $callback === null || $callback($r['state'], $r['questions'], $r['model']));
         self::assert($matching !== [], 'Expected a matching laya prediction, but none was made.');
+    }
+
+    /**
+     * Assert $class was decided at least once (on a state matching $callback, if given). Faked clients only.
+     *
+     * @param  class-string  $class
+     * @param  (callable(mixed $state, ?string $model): bool)|null  $callback
+     */
+    public function assertDecided(string $class, ?callable $callback = null): void
+    {
+        $questions = json_decode(json_encode(array_map(fn (Question $q) => $q->toArray(), DecisionMapper::questions($class)), JSON_THROW_ON_ERROR), true);
+        $matching = array_filter($this->fakeClient()->requests, fn (array $r) => $r['questions'] === $questions && ($callback === null || $callback($r['state'], $r['model'])));
+        self::assert($matching !== [], sprintf('Expected %s to be decided, but it wasn\'t.', $class));
     }
 
     public function assertPredictedCount(int $count): void
