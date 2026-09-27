@@ -34,7 +34,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`4066d5d`](https://github.com/NandhaKishorM/laya/commit/4066d5d5fbf08b66c6757ddeedbd797bd7655bc0)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
@@ -44,7 +44,7 @@ Runnable scripts are in [`examples/`](examples). Set `LAYA_URL` (and `LAYA_API_K
 
 ### Laravel
 
-The service provider is auto-discovered. It registers `Laya` as a singleton, configured from your `.env`:
+For Laravel 13+, the service provider is auto-discovered. It registers `Laya` as a singleton, configured from your `.env`:
 
 ```dotenv
 LAYA_URL=http://localhost:8000

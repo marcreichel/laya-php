@@ -1,4 +1,5 @@
-# A local laya-serve built from upstream's Dockerfile (CPU torch).
+# A local laya-serve built from upstream's Dockerfile (CPU torch), pinned to a known commit.
+# Bump the ref deliberately and rerun the integration tests when upgrading.
 #
 #   docker compose up -d --wait        # first build takes a while
 #   LAYA_URL=http://localhost:8000 composer test:integration
@@ -8,7 +9,7 @@
 services:
   laya-serve:
     build:
-      context: https://github.com/NandhaKishorM/laya.git#main
+      context: https://github.com/NandhaKishorM/laya.git#4066d5d5fbf08b66c6757ddeedbd797bd7655bc0
     command: ["laya-serve"]
     ports:
       - "127.0.0.1:${LAYA_PORT:-8000}:8000"
