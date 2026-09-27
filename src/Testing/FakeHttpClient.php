@@ -27,7 +27,7 @@ final class FakeHttpClient implements ClientInterface
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
         if ($request->getMethod() === 'GET') {
-            return $this->json(['status' => 'ok', 'loaded' => [], 'revisions' => [], 'device' => 'fake']);
+            return $this->json(['status' => 'ok', 'device' => 'fake']);
         }
 
         $body = self::array(json_decode((string) $request->getBody(), true, flags: JSON_THROW_ON_ERROR));
@@ -37,7 +37,8 @@ final class FakeHttpClient implements ClientInterface
 
         $answers = [];
         foreach ($questions as $id => $question) {
-            $id = (string) $id;
+            // predict() only sends string ids; the cast is for static analysis.
+            $id = (string) $id; // @pest-mutate-ignore: RemoveStringCast
             if (! array_key_exists($id, $this->answers)) {
                 throw new \LogicException(sprintf('Laya::fake() has no answer for question "%s". Register one: Laya::fake([\'%s\' => ...]).', $id, $id));
             }
@@ -99,8 +100,8 @@ final class FakeHttpClient implements ClientInterface
     /** @param array<string, mixed> $body */
     private function json(array $body): ResponseInterface
     {
-        return Psr17FactoryDiscovery::findResponseFactory()->createResponse(200)
+        return Psr17FactoryDiscovery::findResponseFactory()->createResponse()
             ->withHeader('Content-Type', 'application/json')
-            ->withBody(Psr17FactoryDiscovery::findStreamFactory()->createStream(json_encode($body, JSON_THROW_ON_ERROR)));
+            ->withBody(Psr17FactoryDiscovery::findStreamFactory()->createStream(json_encode($body, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION)));
     }
 }

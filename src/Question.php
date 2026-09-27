@@ -88,11 +88,11 @@ final readonly class Question
     {
         $question = ['type' => $this->type->value, 'instructions' => $this->instructions];
 
-        // Choice and yes/no criteria are maps; cast so an int-keyed map never encodes as a JSON list.
+        // Choice criteria are a map; cast so an int-keyed map never encodes as a JSON list.
         return match ($this->type) {
             QuestionType::Choice => $question + ['criteria' => (object) $this->criteria],
             QuestionType::Score => $question + ['criteria' => $this->criteria],
-            QuestionType::YesNo => $this->criteria === [] ? $question : $question + ['criteria' => (object) $this->criteria],
+            QuestionType::YesNo => $this->criteria === [] ? $question : $question + ['criteria' => $this->criteria],
         };
     }
 

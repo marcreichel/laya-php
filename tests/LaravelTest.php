@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\ServiceProvider;
 use MarcReichel\Laya\Laravel\LayaServiceProvider;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Question;
@@ -45,4 +46,11 @@ it('swaps the container binding for the fake', function () {
     expect(app(Laya::class))->toBe($fake)
         ->and($result->yesNo('churn')->yes())->toBeTrue();
     $fake->assertPredictedCount(1);
+});
+
+it('publishes the config file under the laya-config tag', function () {
+    $paths = ServiceProvider::pathsToPublish(LayaServiceProvider::class, 'laya-config');
+
+    expect(array_map(realpath(...), array_keys($paths)))->toBe([realpath(__DIR__.'/../config/laya.php')])
+        ->and(array_values($paths))->toBe([config_path('laya.php')]);
 });

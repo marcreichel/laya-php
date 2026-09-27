@@ -67,3 +67,24 @@ it('explains what is wrong with an unsupported decision class', function (object
         public function __construct(#[Ask('Cancel?')] public bool|int $churn) {}
     }, 'needs a single declared type'],
 ]);
+
+enum Code: string
+{
+    case One = '1';
+    case Two = '2';
+}
+
+final readonly class Coded
+{
+    public function __construct(#[Ask('Which code?')] public Code $code) {}
+}
+
+it('maps a numeric choice onto a string-backed enum', function () {
+    $coded = layaRespondingWith(200, ['answers' => ['code' => ['type' => 'choice', 'choice' => 2]]])->decide('x', Coded::class);
+
+    expect($coded->code)->toBe(Code::Two);
+});
+
+it('keeps #[Levels] a list, even from named arguments', function () {
+    expect(new Levels(...['low' => 'low', 'high' => 'high'])->levels)->toBe(['low', 'high']);
+});

@@ -44,9 +44,9 @@ final class DecisionMapper
         foreach (self::parameters($class) as $parameter) {
             $name = $parameter->getName();
             $type = self::typeName($class, $parameter);
-            $arguments[$name] = match (true) {
-                $type === 'bool' => $result->yesNo($name)->yes(),
-                $type === 'int' => $result->score($name)->level(),
+            $arguments[$name] = match ($type) {
+                'bool' => $result->yesNo($name)->yes(),
+                'int' => $result->score($name)->level(),
                 default => self::enumCase($type, $result->choice($name)->choice),
             };
         }
@@ -85,7 +85,7 @@ final class DecisionMapper
             return Question::score($ask->instructions, $levels->levels);
         }
 
-        if (enum_exists($type) && is_subclass_of($type, \BackedEnum::class)) {
+        if (is_subclass_of($type, \BackedEnum::class)) {
             $options = [];
             foreach (new \ReflectionEnum($type)->getCases() as $case) {
                 /** @var \ReflectionEnumBackedCase $case */

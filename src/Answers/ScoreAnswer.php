@@ -44,7 +44,8 @@ final readonly class ScoreAnswer extends Answer
             return (int) round($this->score);
         }
 
-        return (int) array_search(max($this->probabilities), $this->probabilities, true);
+        // A list's keys are ints; the cast is for static analysis.
+        return (int) array_search(max($this->probabilities), $this->probabilities, true); // @pest-mutate-ignore: RemoveIntegerCast
     }
 
     /** The description of the most likely level. */

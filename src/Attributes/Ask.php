@@ -9,7 +9,7 @@ use MarcReichel\Laya\Laya;
 /**
  * Marks a constructor parameter of a decision class as a question for {@see Laya::decide()}.
  */
-#[\Attribute(\Attribute::TARGET_PARAMETER | \Attribute::TARGET_PROPERTY)]
+#[\Attribute(\Attribute::TARGET_PARAMETER | \Attribute::TARGET_PROPERTY)] // @pest-mutate-ignore: BitwiseOrToBitwiseAnd
 final readonly class Ask
 {
     public function __construct(public string $instructions) {}

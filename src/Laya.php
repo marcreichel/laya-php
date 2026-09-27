@@ -192,10 +192,10 @@ final class Laya
         $message = is_string($detail) ? $detail : ($detail !== null ? json_encode($detail) : $response->getReasonPhrase());
         $message = sprintf('laya-serve: %s (HTTP %d)', $message ?: 'error', $status);
 
-        throw match (true) {
-            $status === 401 => new AuthenticationException($message, $status),
-            $status === 503 => new ServerBusyException($message, $status),
-            in_array($status, [400, 413, 422], true) => new ValidationException($message, $status),
+        throw match ($status) {
+            401 => new AuthenticationException($message, $status),
+            503 => new ServerBusyException($message, $status),
+            400, 413, 422 => new ValidationException($message, $status),
             default => new ServerException($message, $status),
         };
     }
@@ -217,7 +217,7 @@ final class Laya
 
         // Unreachable in this suite, which always has PHPUnit; it's for callers without it.
         // @codeCoverageIgnoreStart
-        if (! $condition) {
+        if (! $condition) { // @pest-mutate-ignore
             throw new \AssertionError($message);
         }
         // @codeCoverageIgnoreEnd

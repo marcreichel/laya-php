@@ -44,10 +44,12 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
 
         $answers = [];
         foreach ($raw['answers'] as $id => $answer) {
-            $answers[(string) $id] = Answer::fromArray((string) $id, (array) $answer);
+            $id = (string) $id;
+            $answers[$id] = Answer::fromArray($id, (array) $answer);
         }
         $routing = (array) ($raw['routing'] ?? []);
-        $tokens = ((array) ($raw['usage'] ?? []))['input_tokens'] ?? 0;
+        $usage = is_array($raw['usage'] ?? null) ? $raw['usage'] : [];
+        $tokens = $usage['input_tokens'] ?? 0;
 
         return new self(
             $answers,

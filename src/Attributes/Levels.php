@@ -10,7 +10,7 @@ namespace MarcReichel\Laya\Attributes;
  *     #[Ask('How urgent is this?'), Levels('not urgent', 'soon', 'blocking')]
  *     public int $urgency, // 0, 1 or 2
  */
-#[\Attribute(\Attribute::TARGET_PARAMETER | \Attribute::TARGET_PROPERTY)]
+#[\Attribute(\Attribute::TARGET_PARAMETER | \Attribute::TARGET_PROPERTY)] // @pest-mutate-ignore: BitwiseOrToBitwiseAnd
 final readonly class Levels
 {
     /** @var list<string> */

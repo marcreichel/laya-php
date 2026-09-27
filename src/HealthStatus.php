@@ -22,7 +22,8 @@ final readonly class HealthStatus
     {
         $revisions = [];
         foreach ((array) ($raw['revisions'] ?? []) as $model => $sha) {
-            $revisions[(string) $model] = is_string($sha) ? $sha : null;
+            // PHP normalises array keys either way; the cast is for static analysis.
+            $revisions[(string) $model] = is_string($sha) ? $sha : null; // @pest-mutate-ignore: RemoveStringCast
         }
 
         return new self(
