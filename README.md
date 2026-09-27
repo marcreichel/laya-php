@@ -1,10 +1,10 @@
 # laya-php
 
-[![CI](https://github.com/marcreichel/laya-php/actions/workflows/ci.yml/badge.svg)](https://github.com/marcreichel/laya-php/actions/workflows/ci.yml)
-[![Latest Version](https://img.shields.io/packagist/v/marcreichel/laya-php)](https://packagist.org/packages/marcreichel/laya-php)
-[![PHP Version](https://img.shields.io/packagist/dependency-v/marcreichel/laya-php/php)](https://packagist.org/packages/marcreichel/laya-php)
-[![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen)](phpstan.neon)
-[![License](https://img.shields.io/packagist/l/marcreichel/laya-php)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/marcreichel/laya-php/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/marcreichel/laya-php/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/packagist/v/marcreichel/laya-php?style=for-the-badge)](https://packagist.org/packages/marcreichel/laya-php)
+[![PHP Version](https://img.shields.io/packagist/dependency-v/marcreichel/laya-php/php?style=for-the-badge)](https://packagist.org/packages/marcreichel/laya-php)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen?style=for-the-badge)](phpstan.neon)
+[![License](https://img.shields.io/packagist/l/marcreichel/laya-php?style=for-the-badge)](LICENSE)
 
 **Classify text in PHP without paying for an LLM API.** Route support tickets, spot churn risk and score urgency, in 100+ languages, on your own server, and get the answers back as typed enums, ints and bools.
 
