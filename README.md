@@ -4,6 +4,7 @@
   <a href="https://github.com/marcreichel/laya-php/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/marcreichel/laya-php/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI"></a>
   <a href="https://packagist.org/packages/marcreichel/laya-php"><img src="https://img.shields.io/packagist/v/marcreichel/laya-php?style=for-the-badge" alt="Latest Version"></a>
   <a href="https://packagist.org/packages/marcreichel/laya-php"><img src="https://img.shields.io/packagist/dependency-v/marcreichel/laya-php/php?style=for-the-badge" alt="PHP Version"></a>
+  <a href="#laravel"><img src="https://img.shields.io/badge/Laravel-13%2B-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel 13+"></a>
   <a href="phpstan.neon"><img src="https://img.shields.io/badge/PHPStan-level%20max-brightgreen?style=for-the-badge" alt="PHPStan"></a>
   <a href="https://github.com/marcreichel/laya-php/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=for-the-badge" alt="Coverage 100%"></a>
   <a href="LICENSE"><img src="https://img.shields.io/packagist/l/marcreichel/laya-php?style=for-the-badge" alt="License"></a>
