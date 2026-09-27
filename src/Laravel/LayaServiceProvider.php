@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MarcReichel\Laya\Laravel;
 
+use Illuminate\Cache\CacheManager;
 use Illuminate\Config\Repository;
 use Illuminate\Support\ServiceProvider;
 use MarcReichel\Laya\Laya;
@@ -20,10 +21,14 @@ final class LayaServiceProvider extends ServiceProvider
         $this->app->singleton(Laya::class, function (): Laya {
             $config = $this->app->make(Repository::class);
             $apiKey = $config->get('laya.api_key');
+            $store = $config->get('laya.cache.store');
+            $ttl = $config->get('laya.cache.ttl');
 
             return new Laya(
                 $config->string('laya.url'),
                 apiKey: is_string($apiKey) && $apiKey !== '' ? $apiKey : null,
+                cache: is_string($store) && $store !== '' ? $this->app->make(CacheManager::class)->store($store) : null,
+                cacheTtl: is_numeric($ttl) ? (int) $ttl : null,
             );
         });
     }

@@ -53,6 +53,8 @@ For Laravel 13+, the service provider is auto-discovered. It registers `Laya` as
 ```dotenv
 LAYA_URL=http://localhost:8000
 LAYA_API_KEY=
+LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
+LAYA_CACHE_TTL=     # seconds
 ```
 
 Inject it wherever you need it:
@@ -301,6 +303,16 @@ $result = $laya->predict($lead->message, [
 $lead->score = $result->score('intent')->score; // 0.0 to 3.0
 $lead->hot   = $result->score('intent')->level() === 3 && $result->yesNo('budget')->yes();
 ```
+
+## Caching
+
+Laya gives the same answer to the same input, so you can skip repeat requests with any PSR-16 cache. The key covers the state, the questions and the pinned model:
+
+```php
+$laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400);
+```
+
+The key doesn't include the checkpoint revision, so clear the cache (or set a TTL) when you upgrade `laya-serve`'s checkpoints.
 
 ## Errors
 

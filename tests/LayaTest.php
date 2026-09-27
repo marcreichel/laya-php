@@ -5,6 +5,8 @@ declare(strict_types=1);
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Psr7\Utils;
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\Repository;
 use MarcReichel\Laya\Answers\ChoiceAnswer;
 use MarcReichel\Laya\Answers\YesNoAnswer;
 use MarcReichel\Laya\Exceptions\AuthenticationException;
@@ -24,6 +26,7 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Message\StreamInterface;
+use Psr\SimpleCache\CacheInterface;
 
 // A response in the exact shape laya's Router.predict() returns.
 const LAYA_RESPONSE = [
@@ -278,4 +281,93 @@ it('reads health, dropping what is not laya-shaped', function () {
         ->and($garbage->loaded)->toBe(['english'])
         ->and($garbage->revisions)->toBe([0 => 'abc'])
         ->and($garbage->device)->toBe('auto');
+});
+
+it('caches predictions by state, questions and model', function () {
+    $cache = new class implements CacheInterface
+    {
+        public array $items = [];
+
+        public array $ttls = [];
+
+        public function get(string $key, mixed $default = null): mixed
+        {
+            return $this->items[$key] ?? $default;
+        }
+
+        public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
+        {
+            $this->items[$key] = $value;
+            $this->ttls[$key] = $ttl;
+
+            return true;
+        }
+
+        public function delete(string $key): bool
+        {
+            return true;
+        }
+
+        public function clear(): bool
+        {
+            return true;
+        }
+
+        public function getMultiple(iterable $keys, mixed $default = null): iterable
+        {
+            return [];
+        }
+
+        public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
+        {
+            return true;
+        }
+
+        public function deleteMultiple(iterable $keys): bool
+        {
+            return true;
+        }
+
+        public function has(string $key): bool
+        {
+            return isset($this->items[$key]);
+        }
+    };
+    $sent = [];
+    $client = new class($sent) implements ClientInterface
+    {
+        public function __construct(private array &$sent) {}
+
+        public function sendRequest(RequestInterface $request): ResponseInterface
+        {
+            $this->sent[] = $request;
+
+            return new Response(200, [], json_encode(LAYA_RESPONSE));
+        }
+    };
+    $laya = new Laya(httpClient: $client, cache: $cache, cacheTtl: 60);
+
+    $first = $laya->predict('Billed twice', questions());
+    $second = $laya->predict('Billed twice', questions());
+    $laya->predict('Billed twice', questions(), Model::English);
+    $laya->predict('Billed once', questions());
+
+    expect($sent)->toHaveCount(3)
+        ->and($second)->toEqual($first)
+        ->and(array_keys($cache->items)[0])->toMatch('/^laya\.[0-9a-f]{32}$/')
+        ->and($cache->ttls)->each->toBe(60);
+});
+
+it('does not cache a response that is not laya-shaped', function () {
+    $cache = new Repository(new ArrayStore);
+    $client = new class implements ClientInterface
+    {
+        public function sendRequest(RequestInterface $request): ResponseInterface
+        {
+            return new Response(200, [], '{"oops": true}');
+        }
+    };
+
+    expect(fn () => new Laya(httpClient: $client, cache: $cache)->predict('x', questions()))->toThrow(ServerException::class);
+    expect($cache->getStore()->all())->toBe([]);
 });

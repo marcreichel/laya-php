@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\ServiceProvider;
 use MarcReichel\Laya\Laravel\LayaServiceProvider;
 use MarcReichel\Laya\Laya;
@@ -53,4 +54,22 @@ it('publishes the config file under the laya-config tag', function () {
 
     expect(array_map(realpath(...), array_keys($paths)))->toBe([realpath(__DIR__.'/../config/laya.php')])
         ->and(array_values($paths))->toBe([config_path('laya.php')]);
+});
+
+it('caches predictions in the configured store for the configured ttl', function () {
+    config(['laya.cache.store' => 'array', 'laya.cache.ttl' => '60']);
+
+    $laya = app(Laya::class);
+    $cache = (fn () => $this->cache)->call($laya);
+
+    expect($cache)->toBe(Cache::store('array'))
+        ->and((fn () => $this->cacheTtl)->call($laya))->toBe(60);
+});
+
+it('does not cache by default, or with an empty store', function () {
+    config(['laya.cache.store' => '']);
+    $laya = app(Laya::class);
+
+    expect((fn () => $this->cache)->call($laya))->toBeNull()
+        ->and((fn () => $this->cacheTtl)->call($laya))->toBeNull();
 });

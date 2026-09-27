@@ -20,6 +20,7 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\SimpleCache\CacheInterface;
 
 /**
  * Client for a laya-serve instance.
@@ -40,6 +41,8 @@ final class Laya
 
     /**
      * @param  ClientInterface|null  $httpClient  any PSR-18 client; discovered when omitted
+     * @param  CacheInterface|null  $cache  caches predictions by state, questions and model; laya is deterministic
+     * @param  int|\DateInterval|null  $cacheTtl  null keeps entries as long as the cache does
      */
     public function __construct(
         string $baseUrl = 'http://localhost:8000',
@@ -47,6 +50,8 @@ final class Laya
         ?ClientInterface $httpClient = null,
         ?RequestFactoryInterface $requestFactory = null,
         ?StreamFactoryInterface $streamFactory = null,
+        private readonly ?CacheInterface $cache = null,
+        private readonly int|\DateInterval|null $cacheTtl = null,
     ) {
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->http = $httpClient ?? Psr18ClientDiscovery::find();
@@ -109,11 +114,23 @@ final class Laya
             $body['model'] = $model->value;
         }
 
+        $json = json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        // ponytail: the key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
+        $key = 'laya.'.hash('xxh128', $json);
+        $cached = $this->cache?->get($key);
+        if (is_array($cached)) {
+            return Result::fromArray($cached);
+        }
+
         $request = $this->request('POST', '/v1/systemone')
             ->withHeader('Content-Type', 'application/json')
-            ->withBody($this->streamFactory->createStream(json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)));
+            ->withBody($this->streamFactory->createStream($json));
 
-        return Result::fromArray($this->send($request));
+        $raw = $this->send($request);
+        $result = Result::fromArray($raw);
+        $this->cache?->set($key, $raw, $this->cacheTtl);
+
+        return $result;
     }
 
     /**
