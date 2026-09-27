@@ -28,11 +28,16 @@ it('answers from registered values and records predictions', function () {
 it('fails loudly on unregistered questions and impossible answers', function () {
     expect(fn () => Laya::fake()->predict('x', ['churn' => Question::yesNo('Cancel?')]))->toThrow(LogicException::class, 'no answer for question "churn"')
         ->and(fn () => Laya::fake(['d' => 'sales'])->predict('x', ['d' => Question::choice('Dept?', ['billing'])]))->toThrow(LogicException::class, 'not one of its options')
-        ->and(fn () => Laya::fake(['u' => 5])->predict('x', ['u' => Question::score('Urgent?', ['low'])]))->toThrow(LogicException::class, 'level index');
+        ->and(fn () => Laya::fake(['u' => 5])->predict('x', ['u' => Question::score('Urgent?', ['low'])]))->toThrow(LogicException::class, 'level index')
+        ->and(fn () => Laya::fake(['c' => 'yes'])->predict('x', ['c' => Question::yesNo('Cancel?')]))->toThrow(LogicException::class, 'bool or a probability');
 });
 
 it('fails assertions that do not hold', function () {
     expect(fn () => Laya::fake()->assertPredicted())->toThrow(AssertionFailedError::class)
         ->and(fn () => Laya::fake()->assertNothingPredicted())->not->toThrow(AssertionFailedError::class)
         ->and(fn () => layaRespondingWith(200, [])->assertNothingPredicted())->toThrow(LogicException::class, 'Laya::fake()');
+});
+
+it('reports a healthy server', function () {
+    expect(Laya::fake()->health()->ok)->toBeTrue();
 });

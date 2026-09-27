@@ -317,9 +317,10 @@ If code asks a question you didn't register, or gives an answer that isn't one o
 ## Development
 
 ```bash
-composer test       # Pest
-composer analyse    # PHPStan (max)
-composer lint       # Pint
+composer test           # Pest
+composer test:coverage  # Pest with coverage (Xdebug or pcov), fails below 100%
+composer analyse        # PHPStan (max)
+composer lint           # Pint
 
 docker compose up -d --wait
 LAYA_URL=http://localhost:8000 composer test:integration

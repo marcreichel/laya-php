@@ -61,4 +61,9 @@ it('explains what is wrong with an unsupported decision class', function (object
     {
         public function __construct(#[Ask('Name?')] public string $name) {}
     }, 'has type string'],
+    'no constructor' => [new class {}, 'needs a constructor'],
+    'union type' => [new class(true)
+    {
+        public function __construct(#[Ask('Cancel?')] public bool|int $churn) {}
+    }, 'needs a single declared type'],
 ]);

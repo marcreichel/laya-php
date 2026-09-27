@@ -17,8 +17,8 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php: ${{ matrix.php }}
-          coverage: none
+          coverage: pcov
       - run: composer install --no-interaction --no-progress
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress
-      - run: vendor/bin/pest
+      - run: vendor/bin/pest --coverage --min=100

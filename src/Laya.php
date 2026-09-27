@@ -211,8 +211,15 @@ final class Laya
     {
         if (class_exists(Assert::class)) {
             Assert::assertTrue($condition, $message);
-        } elseif (! $condition) {
+
+            return;
+        }
+
+        // Unreachable in this suite, which always has PHPUnit; it's for callers without it.
+        // @codeCoverageIgnoreStart
+        if (! $condition) {
             throw new \AssertionError($message);
         }
+        // @codeCoverageIgnoreEnd
     }
 }

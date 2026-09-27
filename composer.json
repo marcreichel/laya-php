@@ -38,6 +38,10 @@
     },
     "scripts": {
         "test": "pest",
+        "test:coverage": [
+            "@putenv XDEBUG_MODE=coverage",
+            "pest --coverage --min=100"
+        ],
         "test:integration": "pest --group=integration",
         "analyse": "phpstan analyse",
         "lint": "pint --test",

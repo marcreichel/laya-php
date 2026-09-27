@@ -127,3 +127,31 @@ it('reads the health probe', function () {
 
     expect($health->ok)->toBeTrue()->and($health->loaded)->toBe(['english'])->and($health->device)->toBe('cpu');
 });
+
+it('is a read-only, countable, iterable map of answers', function () {
+    $result = layaRespondingWith(200, LAYA_RESPONSE)->predict('Billed twice', questions());
+
+    expect(isset($result['churn']))->toBeTrue()
+        ->and(isset($result['nope']))->toBeFalse()
+        ->and(array_keys(iterator_to_array($result)))->toBe(['department', 'urgency', 'churn'])
+        ->and(function () use ($result) {
+            $result['churn'] = null;
+        })->toThrow(LogicException::class, 'immutable')
+        ->and(function () use ($result) {
+            unset($result['churn']);
+        })->toThrow(LogicException::class, 'immutable');
+});
+
+it('rounds the expected score when laya sends no level probabilities', function () {
+    $response = LAYA_RESPONSE;
+    $response['answers']['urgency']['probabilities'] = [];
+
+    expect(layaRespondingWith(200, $response)->predict('x', questions())->score('urgency')->level())->toBe(2);
+});
+
+it('treats a response that is not laya-shaped as a server error', function (array $response, string $message) {
+    expect(fn () => layaRespondingWith(200, $response)->predict('x', questions()))->toThrow(ServerException::class, $message);
+})->with([
+    'no answers' => [['detail' => 'ok'], 'has no answers'],
+    'choice without a choice' => [['answers' => ['department' => ['type' => 'choice']]], 'has no choice'],
+]);
