@@ -182,10 +182,10 @@ if ($result->truncated) {
 $results = $laya->predictMany($tickets->pluck('body', 'id')->all(), $questions);
 $results[42]->choice('department');
 
-$triages = $laya->decideMany($tickets->pluck('body', 'id')->all(), Triage::class);
+$triages = $laya->decideMany($tickets->pluck('body', 'id')->all(), Triage::class, maxLen: 4096);
 ```
 
-Cached states aren't sent again, and the rest go out in requests of at most 64 states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. laya-serve doesn't apply `maxLen` or `headMaxLen` to batches yet, so these methods don't take them. Use `predict()` for long documents. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
+Cached states aren't sent again, and the rest go out in requests of at most 64 states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. `maxLen` and `headMaxLen` apply to every state in the batch and need laya-serve 0.3.23; older servers ignore them. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
 
 Both methods are experimental and may change in a minor release.
 

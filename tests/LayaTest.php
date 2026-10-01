@@ -129,6 +129,12 @@ it('reads the health probe', function () {
     expect($health->ok)->toBeTrue()->and($health->loaded)->toBe(['english'])->and($health->device)->toBe('cpu');
 });
 
+it('reads the liveness-only health answer laya-serve gives without the API key', function () {
+    $health = layaRespondingWith(200, ['status' => 'ok'])->health();
+
+    expect($health->ok)->toBeTrue()->and($health->loaded)->toBe([])->and($health->revisions)->toBe([]);
+});
+
 it('is a read-only, countable, iterable map of answers', function () {
     $result = layaRespondingWith(200, LAYA_RESPONSE)->predict('Billed twice', questions());
 
