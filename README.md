@@ -38,7 +38,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`9d95567`](https://github.com/NandhaKishorM/laya/commit/9d955671415fc19f069b9cc998928075c1f255ec)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`6d942c9`](https://github.com/NandhaKishorM/laya/commit/6d942c92081fbc139e736bbd9ac0023223c29b7f)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
