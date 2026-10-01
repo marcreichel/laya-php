@@ -437,8 +437,8 @@ If code asks a question you didn't register, or gives an answer that isn't one o
 
 ## Limitations
 
-- **One request per prediction.** `laya-serve` has no batch endpoint and runs one inference at a time, so loop over your inputs.
-- **Server limits.** `laya-serve` caps requests at 64 questions, 50,000 characters of state, 100 choice options, 32 score levels and 512 answer options in total.
+- **One inference at a time.** `laya-serve` handles one request at a time, so parallel requests just wait in line. For many states, use [`predictMany()`](#batches-experimental), which shares forward passes.
+- **Server limits.** `laya-serve` caps requests at 64 states per batch, 64 questions, 50,000 characters of state, 100 choice options, 32 score levels and 512 answer options in total.
 
 ## Development
 
