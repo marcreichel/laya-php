@@ -38,7 +38,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`9d95567`](https://github.com/NandhaKishorM/laya/commit/9d955671415fc19f069b9cc998928075c1f255ec)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`6d942c9`](https://github.com/NandhaKishorM/laya/commit/6d942c92081fbc139e736bbd9ac0023223c29b7f)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
@@ -163,6 +163,31 @@ $laya->decide($ticket, Triage::class, headMaxLen: 384);
 ```
 
 laya-serve caps both at `LAYA_MAX_TOKEN_BUDGET` (8,192 by default) and answers anything above it with a `ValidationException`.
+
+From laya-serve 0.3.22, `$result->truncated` tells you whether the state was cut off, so you know when to raise `maxLen`:
+
+```php
+$result = $laya->predict($contract, $questions);
+
+if ($result->truncated) {
+    $result = $laya->predict($contract, $questions, maxLen: 4096);
+}
+```
+
+### Batches (experimental)
+
+`predictMany()` and `decideMany()` ask the same questions about many states, which laya-serve 0.3.22 and later answers in shared forward passes. Results keep the keys you pass in:
+
+```php
+$results = $laya->predictMany($tickets->pluck('body', 'id')->all(), $questions);
+$results[42]->choice('department');
+
+$triages = $laya->decideMany($tickets->pluck('body', 'id')->all(), Triage::class);
+```
+
+Cached states aren't sent again, and the rest go out in requests of at most 64 states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. laya-serve doesn't apply `maxLen` or `headMaxLen` to batches yet, so these methods don't take them. Use `predict()` for long documents. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
+
+Both methods are experimental and may change in a minor release.
 
 ## Decisions into objects
 

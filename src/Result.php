@@ -26,6 +26,7 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
      * @param  string|null  $routedModel  the checkpoint laya's router picked, e.g. "english"
      * @param  array<mixed>  $routing  laya's full routing decision (model, reason, detected language, ...)
      * @param  array<mixed>  $raw  the whole response body
+     * @param  bool  $truncated  laya cut the state off at its token budget; raise maxLen to read it all (laya-serve >= 0.3.22)
      */
     public function __construct(
         public array $answers,
@@ -33,6 +34,7 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
         public array $routing,
         public int $inputTokens,
         public array $raw,
+        public bool $truncated = false,
     ) {}
 
     /** @param array<mixed> $raw */
@@ -57,6 +59,7 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
             $routing,
             is_int($tokens) ? $tokens : 0,
             $raw,
+            ($usage['truncated'] ?? false) === true,
         );
     }
 
