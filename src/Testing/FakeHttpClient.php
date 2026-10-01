@@ -33,7 +33,22 @@ final class FakeHttpClient implements ClientInterface
         $body = self::array(json_decode((string) $request->getBody(), true, flags: JSON_THROW_ON_ERROR));
         $questions = self::array($body['questions'] ?? null);
         $model = is_string($body['model'] ?? null) ? $body['model'] : null;
-        $this->requests[] = ['state' => $body['state'] ?? null, 'questions' => $questions, 'model' => $model];
+
+        // A batch records each state as its own prediction, so assertions don't care whether code batched.
+        if (str_ends_with($request->getUri()->getPath(), '/batch')) {
+            return $this->json(['results' => array_map(fn (mixed $state) => $this->predict($state, $questions, $model), self::array($body['states'] ?? null))]);
+        }
+
+        return $this->json($this->predict($body['state'] ?? null, $questions, $model));
+    }
+
+    /**
+     * @param  array<mixed>  $questions
+     * @return array<string, mixed>
+     */
+    private function predict(mixed $state, array $questions, ?string $model): array
+    {
+        $this->requests[] = ['state' => $state, 'questions' => $questions, 'model' => $model];
 
         $answers = [];
         foreach ($questions as $id => $question) {
@@ -45,12 +60,12 @@ final class FakeHttpClient implements ClientInterface
             $answers[$id] = $this->answer($id, self::array($question), $this->answers[$id]);
         }
 
-        return $this->json([
+        return [
             'model' => 'laya-fake',
             'answers' => $answers,
             'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
             'routing' => ['model' => $model ?? 'english', 'reason' => 'fake'],
-        ]);
+        ];
     }
 
     /**

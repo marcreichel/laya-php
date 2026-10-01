@@ -31,6 +31,9 @@ use Psr\SimpleCache\CacheInterface;
  */
 final class Laya
 {
+    /** laya-serve refuses batches of more states (MAX_BATCH_STATES). Pest can't cover a constant; the chunking test pins it. */
+    private const int BATCH_SIZE = 64; // @pest-mutate-ignore
+
     private readonly string $baseUrl;
 
     private readonly ClientInterface $http;
@@ -100,46 +103,76 @@ final class Laya
      */
     public function predict(string|array|\JsonSerializable $state, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): Result
     {
-        $wire = [];
-        foreach ($questions as $id => $question) {
-            if (! is_string($id)) {
-                throw new InvalidQuestionException(sprintf('Question ids must be strings, got %s. Pass questions as [\'id\' => Question::...].', get_debug_type($id)));
-            }
-            if (! $question instanceof Question) {
-                throw new InvalidQuestionException(sprintf('Question "%s" must be a %s, got %s.', $id, Question::class, get_debug_type($question)));
-            }
-            $wire[$id] = $question->toArray();
-        }
-
-        $body = ['state' => $state, 'questions' => (object) $wire];
-        if ($model !== null) {
-            $body['model'] = $model->value;
-        }
-        // laya-serve validates both (positive, <= LAYA_MAX_TOKEN_BUDGET) and answers 422.
-        if ($maxLen !== null) {
-            $body['max_len'] = $maxLen;
-        }
-        if ($headMaxLen !== null) {
-            $body['head_max_len'] = $headMaxLen;
-        }
-
-        $json = json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
-        // The key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
-        $key = 'laya.'.hash('xxh128', $json);
+        $json = self::json($this->body($state, self::wire($questions), $model, $maxLen, $headMaxLen));
+        $key = self::cacheKey($json);
         $cached = $this->cache?->get($key);
         if (is_array($cached)) {
             return Result::fromArray($cached);
         }
 
-        $request = $this->request('POST', '/v1/systemone')
-            ->withHeader('Content-Type', 'application/json')
-            ->withBody($this->streamFactory->createStream($json));
-
-        $raw = $this->send($request);
+        $raw = $this->send($this->post('/v1/systemone', $json));
         $result = Result::fromArray($raw);
         $this->cache?->set($key, $raw, $this->cacheTtl);
 
         return $result;
+    }
+
+    /**
+     * Ask the same questions about many states, answered in shared forward passes.
+     *
+     *     $results = $laya->predictMany($tickets->pluck('body', 'id')->all(), $questions);
+     *     $results[42]->choice('department');
+     *
+     * Results keep the keys of $states. Cached states aren't sent again, and the rest go out
+     * in requests of at most 64 states. laya-serve doesn't apply token budgets to batches yet,
+     * so long states are cut off at the checkpoint's default length; use predict() with maxLen for those.
+     *
+     * @experimental needs laya-serve >= 0.3.22, and may change in a minor release
+     *
+     * @template K of array-key
+     *
+     * @param  array<K, string|array<mixed>|\JsonSerializable>  $states
+     * @param  array<string, Question>  $questions
+     * @return array<K, Result>
+     */
+    public function predictMany(array $states, array $questions, ?Model $model = null): array
+    {
+        $wire = self::wire($questions);
+        $results = [];
+        $misses = [];
+        foreach ($states as $id => $state) {
+            $key = self::cacheKey(self::json($this->body($state, $wire, $model)));
+            $cached = $this->cache?->get($key);
+            // Placeholders keep the input order for the answers filled in below.
+            $results[$id] = is_array($cached) ? Result::fromArray($cached) : null;
+            if (! is_array($cached)) {
+                $misses[$id] = $key;
+            }
+        }
+
+        foreach (array_chunk($misses, self::BATCH_SIZE, preserve_keys: true) as $chunk) {
+            $body = ['states' => array_values(array_intersect_key($states, $chunk)), 'questions' => $wire];
+            if ($model !== null) {
+                $body['model'] = $model->value;
+            }
+            try {
+                $raw = $this->send($this->post('/v1/systemone/batch', self::json($body)));
+            } catch (ServerException $e) {
+                throw $e->status === 404 ? new ServerException('laya-serve has no batch endpoint; predictMany() needs laya-serve 0.3.22 or later.', 404, $e) : $e;
+            }
+            $answers = $raw['results'] ?? null;
+            if (! is_array($answers) || ! array_is_list($answers) || count($answers) !== count($chunk)) {
+                throw new ServerException('The laya-serve batch response doesn\'t have one result per state.', 200);
+            }
+            foreach (array_keys($chunk) as $i => $id) {
+                $answer = is_array($answers[$i]) ? $answers[$i] : [];
+                $results[$id] = Result::fromArray($answer);
+                $this->cache?->set($chunk[$id], $answer, $this->cacheTtl);
+            }
+        }
+
+        /** @var array<K, Result> $results */
+        return $results;
     }
 
     /**
@@ -163,6 +196,23 @@ final class Laya
     public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): object
     {
         return DecisionMapper::hydrate($class, $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen));
+    }
+
+    /**
+     * decide() for many states at once, through predictMany(). Decisions keep the keys of $states.
+     *
+     * @experimental needs laya-serve >= 0.3.22, and may change in a minor release
+     *
+     * @template T of object
+     * @template K of array-key
+     *
+     * @param  array<K, string|array<mixed>|\JsonSerializable>  $states
+     * @param  class-string<T>  $class
+     * @return array<K, T>
+     */
+    public function decideMany(array $states, string $class, ?Model $model = null): array
+    {
+        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $this->predictMany($states, DecisionMapper::questions($class), $model));
     }
 
     public function health(): HealthStatus
@@ -203,6 +253,63 @@ final class Laya
     public function assertNothingPredicted(): void
     {
         $this->assertPredictedCount(0);
+    }
+
+    /** @param array<string, Question> $questions */
+    private static function wire(array $questions): object
+    {
+        $wire = [];
+        foreach ($questions as $id => $question) {
+            if (! is_string($id)) {
+                throw new InvalidQuestionException(sprintf('Question ids must be strings, got %s. Pass questions as [\'id\' => Question::...].', get_debug_type($id)));
+            }
+            if (! $question instanceof Question) {
+                throw new InvalidQuestionException(sprintf('Question "%s" must be a %s, got %s.', $id, Question::class, get_debug_type($question)));
+            }
+            $wire[$id] = $question->toArray();
+        }
+
+        return (object) $wire;
+    }
+
+    /**
+     * @param  string|array<mixed>|\JsonSerializable  $state
+     * @return array<string, mixed>
+     */
+    private function body(string|array|\JsonSerializable $state, object $wire, ?Model $model, ?int $maxLen = null, ?int $headMaxLen = null): array
+    {
+        $body = ['state' => $state, 'questions' => $wire];
+        if ($model !== null) {
+            $body['model'] = $model->value;
+        }
+        // laya-serve validates both (positive, <= LAYA_MAX_TOKEN_BUDGET) and answers 422.
+        if ($maxLen !== null) {
+            $body['max_len'] = $maxLen;
+        }
+        if ($headMaxLen !== null) {
+            $body['head_max_len'] = $headMaxLen;
+        }
+
+        return $body;
+    }
+
+    /** @param array<string, mixed> $body */
+    private static function json(array $body): string
+    {
+        return json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
+
+    // The key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
+    private static function cacheKey(string $json): string
+    {
+        return 'laya.'.hash('xxh128', $json);
+    }
+
+    private function post(string $path, string $json): RequestInterface
+    {
+        return $this->request('POST', $path)
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody($this->streamFactory->createStream($json));
     }
 
     private function request(string $method, string $path): RequestInterface

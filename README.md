@@ -174,6 +174,21 @@ if ($result->truncated) {
 }
 ```
 
+### Batches (experimental)
+
+`predictMany()` and `decideMany()` ask the same questions about many states, which laya-serve 0.3.22 and later answers in shared forward passes. Results keep the keys you pass in:
+
+```php
+$results = $laya->predictMany($tickets->pluck('body', 'id')->all(), $questions);
+$results[42]->choice('department');
+
+$triages = $laya->decideMany($tickets->pluck('body', 'id')->all(), Triage::class);
+```
+
+Cached states aren't sent again, and the rest go out in requests of at most 64 states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. laya-serve doesn't apply `maxLen` or `headMaxLen` to batches yet, so these methods don't take them. Use `predict()` for long documents. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
+
+Both methods are experimental and may change in a minor release.
+
 ## Decisions into objects
 
 Describe the decision as a class, and `decide()` asks its questions and gives you an instance back:

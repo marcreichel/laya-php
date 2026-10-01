@@ -28,29 +28,6 @@ use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Message\StreamInterface;
 use Psr\SimpleCache\CacheInterface;
 
-// A response in the exact shape laya's Router.predict() returns.
-const LAYA_RESPONSE = [
-    'model' => 'laya-rl-agent',
-    'answers' => [
-        'department' => ['type' => 'choice', 'choice' => 'billing', 'probabilities' => ['billing' => 0.91, 'technical' => 0.06, 'other' => 0.03],
-            'confidence' => 0.87, 'answer_confidence' => 0.9, 'action' => ['act_probability' => 0.5]],
-        'urgency' => ['type' => 'score', 'score' => 1.74, 'legend' => ['0' => 'not urgent', '1' => 'soon', '2' => 'blocking'],
-            'probabilities' => ['0' => 0.05, '1' => 0.16, '2' => 0.79], 'confidence' => 0.7, 'answer_confidence' => 0.75, 'action' => ['act_probability' => 0.5]],
-        'churn' => ['type' => 'noul', 'noul' => 0.83, 'confidence' => 0.83, 'answer_confidence' => 0.8, 'action' => ['act_probability' => 0.5]],
-    ],
-    'usage' => ['input_tokens' => 42, 'output_tokens' => 0],
-    'routing' => ['model' => 'english', 'reason' => 'latin script, english'],
-];
-
-function questions(): array
-{
-    return [
-        'department' => Question::choice('Which department?', ['billing' => 'refunds', 'technical' => 'bugs', 'other' => 'rest']),
-        'urgency' => Question::score('How urgent?', ['not urgent', 'soon', 'blocking']),
-        'churn' => Question::yesNo('Threatens to cancel?'),
-    ];
-}
-
 it('posts state, questions and model to /v1/systemone with the bearer token', function () {
     $sent = [];
     layaRespondingWith(200, LAYA_RESPONSE, $sent, apiKey: 's3cret')
