@@ -70,6 +70,19 @@ it('leaves the model out so laya routes each state by language', function () {
     expect(json_decode((string) $sent[0]->getBody(), true))->not->toHaveKey('model');
 });
 
+it('sends the token budgets for every state and caches them apart from unbudgeted predictions', function () {
+    $sent = [];
+    $laya = layaBatching($sent, new Repository(new ArrayStore));
+    $laya->predict('long', questions());
+    $laya->decideMany(['long'], BatchTriage::class, maxLen: 2048, headMaxLen: 64);
+
+    $body = json_decode((string) $sent[1]->getBody(), true);
+    expect($sent)->toHaveCount(2)
+        ->and($body['max_len'])->toBe(2048)
+        ->and($body['head_max_len'])->toBe(64)
+        ->and(json_decode((string) $sent[0]->getBody(), true))->not->toHaveKeys(['max_len', 'head_max_len']);
+});
+
 it('sends nothing for no states', function () {
     $sent = [];
 

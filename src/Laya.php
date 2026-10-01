@@ -103,7 +103,7 @@ final class Laya
      */
     public function predict(string|array|\JsonSerializable $state, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): Result
     {
-        $json = self::json($this->body($state, self::wire($questions), $model, $maxLen, $headMaxLen));
+        $json = self::json($this->body(['state' => $state], self::wire($questions), $model, $maxLen, $headMaxLen));
         $key = self::cacheKey($json);
         $cached = $this->cache?->get($key);
         if (is_array($cached)) {
@@ -124,24 +124,25 @@ final class Laya
      *     $results[42]->choice('department');
      *
      * Results keep the keys of $states. Cached states aren't sent again, and the rest go out
-     * in requests of at most 64 states. laya-serve doesn't apply token budgets to batches yet,
-     * so long states are cut off at the checkpoint's default length; use predict() with maxLen for those.
+     * in requests of at most 64 states.
      *
-     * @experimental needs laya-serve >= 0.3.22, and may change in a minor release
+     * @experimental needs laya-serve >= 0.3.22 (>= 0.3.23 for token budgets), and may change in a minor release
      *
      * @template K of array-key
      *
      * @param  array<K, string|array<mixed>|\JsonSerializable>  $states
      * @param  array<string, Question>  $questions
+     * @param  int|null  $maxLen  token budget for each state (laya-serve >= 0.3.23)
+     * @param  int|null  $headMaxLen  token budget for each question and its options (laya-serve >= 0.3.23)
      * @return array<K, Result>
      */
-    public function predictMany(array $states, array $questions, ?Model $model = null): array
+    public function predictMany(array $states, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): array
     {
         $wire = self::wire($questions);
         $results = [];
         $misses = [];
         foreach ($states as $id => $state) {
-            $key = self::cacheKey(self::json($this->body($state, $wire, $model)));
+            $key = self::cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen)));
             $cached = $this->cache?->get($key);
             // Placeholders keep the input order for the answers filled in below.
             $results[$id] = is_array($cached) ? Result::fromArray($cached) : null;
@@ -151,10 +152,8 @@ final class Laya
         }
 
         foreach (array_chunk($misses, self::BATCH_SIZE, preserve_keys: true) as $chunk) {
-            $body = ['states' => array_values(array_intersect_key($states, $chunk)), 'questions' => $wire];
-            if ($model !== null) {
-                $body['model'] = $model->value;
-            }
+            // The batch endpoint takes the same controls as a single prediction and applies them to every state.
+            $body = $this->body(['states' => array_values(array_intersect_key($states, $chunk))], $wire, $model, $maxLen, $headMaxLen);
             try {
                 $raw = $this->send($this->post('/v1/systemone/batch', self::json($body)));
             } catch (ServerException $e) {
@@ -201,7 +200,7 @@ final class Laya
     /**
      * decide() for many states at once, through predictMany(). Decisions keep the keys of $states.
      *
-     * @experimental needs laya-serve >= 0.3.22, and may change in a minor release
+     * @experimental needs laya-serve >= 0.3.22 (>= 0.3.23 for token budgets), and may change in a minor release
      *
      * @template T of object
      * @template K of array-key
@@ -210,9 +209,9 @@ final class Laya
      * @param  class-string<T>  $class
      * @return array<K, T>
      */
-    public function decideMany(array $states, string $class, ?Model $model = null): array
+    public function decideMany(array $states, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): array
     {
-        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $this->predictMany($states, DecisionMapper::questions($class), $model));
+        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $this->predictMany($states, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen));
     }
 
     public function health(): HealthStatus
@@ -273,12 +272,12 @@ final class Laya
     }
 
     /**
-     * @param  string|array<mixed>|\JsonSerializable  $state
+     * @param  array{state: mixed}|array{states: list<mixed>}  $states  one state, or a batch's states
      * @return array<string, mixed>
      */
-    private function body(string|array|\JsonSerializable $state, object $wire, ?Model $model, ?int $maxLen = null, ?int $headMaxLen = null): array
+    private function body(array $states, object $wire, ?Model $model, ?int $maxLen = null, ?int $headMaxLen = null): array
     {
-        $body = ['state' => $state, 'questions' => $wire];
+        $body = $states + ['questions' => $wire];
         if ($model !== null) {
             $body['model'] = $model->value;
         }

@@ -46,3 +46,11 @@ it('answers a batch like single predictions', function () {
 it('reports health', function () {
     expect($this->laya->health()->ok)->toBeTrue();
 })->group('integration');
+
+it('applies token budgets to a batch', function () {
+    $question = ['spam' => Question::yesNo('Is this spam?')];
+    $long = [str_repeat('Lorem ipsum dolor sit amet. ', 400)];
+
+    expect($this->laya->predictMany($long, $question)[0]->truncated)->toBeTrue()
+        ->and($this->laya->predictMany($long, $question, maxLen: 4096)[0]->truncated)->toBeFalse();
+})->group('integration');
