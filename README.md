@@ -317,6 +317,37 @@ $lead->score = $result->score('intent')->score; // 0.0 to 3.0
 $lead->hot   = $result->score('intent')->level() === 3 && $result->yesNo('budget')->yes();
 ```
 
+### Finding relevant contract fields
+
+Before you look anything up, find out which of a contract's fields a question needs. A yes/no question per field catches questions that touch several fields. One choice question over all fields is sharper when a single field is meant. Both go in the same request:
+
+```php
+$fields = [
+    'notice_period'  => 'how far in advance either side must give notice to end the contract',
+    'auto_renewal'   => 'whether and for how long the contract renews automatically',
+    'governing_law'  => 'which country\'s law applies',
+    'jurisdiction'   => 'which court handles disputes',
+    // ...
+];
+
+$questions = array_map(
+    fn (string $description) => Question::yesNo("Do you need to know the contract's clause on {$description} to answer this question?"),
+    $fields,
+) + ['main_clause' => Question::choice('Which contract clause do you need to answer this question?', $fields)];
+
+$result = $laya->predict('Who do we sue in if things go wrong, and under which law?', $questions);
+
+$relevant = array_filter(array_keys($fields), fn (string $field) => $result->yesNo($field)->yes(threshold: 0.2));
+
+if ($result->choice('main_clause')->answerConfidence >= 0.7) {
+    $relevant[] = $result->choice('main_clause')->choice;
+}
+
+$relevant = array_unique($relevant); // ['governing_law', 'jurisdiction', ...]
+```
+
+Yes/no probabilities for this kind of question run low, so the threshold is 0.2 instead of 0.5. The full version with 20 fields is in [`examples/06-contract-fields.php`](examples/06-contract-fields.php).
+
 ## Caching
 
 Laya gives the same answer to the same input, so you can skip repeat requests with any PSR-16 cache. The key covers the state, the questions, the pinned model and the token budgets:
