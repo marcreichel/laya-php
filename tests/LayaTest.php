@@ -100,6 +100,7 @@ it('maps every answer type onto typed answers', function () {
         ->and($result->yesNo('churn')->yes(threshold: 0.9))->toBeFalse()
         ->and($result->routedModel)->toBe('english')
         ->and($result->inputTokens)->toBe(42)
+        ->and($result->truncated)->toBeFalse()
         ->and($result)->toHaveCount(3);
 });
 
@@ -272,7 +273,13 @@ it('tolerates malformed routing and usage', function () {
         ->and($result->routing)->toBe(['garbage'])
         ->and($result->inputTokens)->toBe(0)
         ->and(Result::fromArray(['answers' => []])->inputTokens)->toBe(0)
-        ->and($noInt->inputTokens)->toBe(0);
+        ->and($noInt->inputTokens)->toBe(0)
+        ->and(Result::fromArray(['answers' => [], 'usage' => ['truncated' => 1]])->truncated)->toBeFalse();
+});
+
+it('reports a state laya cut off', function () {
+    expect(Result::fromArray(['answers' => [], 'usage' => ['truncated' => true]])->truncated)->toBeTrue()
+        ->and((new Result([], null, [], 0, []))->truncated)->toBeFalse();
 });
 
 it('reads numeric answer ids and offsets as strings', function () {

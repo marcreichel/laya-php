@@ -164,6 +164,16 @@ $laya->decide($ticket, Triage::class, headMaxLen: 384);
 
 laya-serve caps both at `LAYA_MAX_TOKEN_BUDGET` (8,192 by default) and answers anything above it with a `ValidationException`.
 
+From laya-serve 0.3.22, `$result->truncated` tells you whether the state was cut off, so you know when to raise `maxLen`:
+
+```php
+$result = $laya->predict($contract, $questions);
+
+if ($result->truncated) {
+    $result = $laya->predict($contract, $questions, maxLen: 4096);
+}
+```
+
 ## Decisions into objects
 
 Describe the decision as a class, and `decide()` asks its questions and gives you an instance back:
