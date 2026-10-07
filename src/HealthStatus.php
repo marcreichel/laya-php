@@ -42,6 +42,6 @@ final readonly class HealthStatus
 
     private static function seconds(mixed $value): ?float
     {
-        return is_int($value) || is_float($value) ? (float) $value : null;
+        return is_int($value) || is_float($value) ? $value : null;
     }
 }
