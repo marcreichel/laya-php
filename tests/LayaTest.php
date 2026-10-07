@@ -132,7 +132,14 @@ it('reads the health probe', function () {
 it('reads the liveness-only health answer laya-serve gives without the API key', function () {
     $health = layaRespondingWith(200, ['status' => 'ok'])->health();
 
-    expect($health->ok)->toBeTrue()->and($health->loaded)->toBe([])->and($health->revisions)->toBe([]);
+    expect($health->ok)->toBeTrue()->and($health->loaded)->toBe([])->and($health->revisions)->toBe([])
+        ->and($health->idleUnloadSeconds)->toBeNull()->and($health->idleSeconds)->toBeNull();
+});
+
+it('reads the idle-unload window and idle time', function () {
+    $health = layaRespondingWith(200, ['status' => 'ok', 'loaded' => [], 'device' => 'cpu', 'idle_unload_seconds' => 600, 'idle_seconds' => 12.5])->health();
+
+    expect($health->idleUnloadSeconds)->toBe(600.0)->and($health->idleSeconds)->toBe(12.5);
 });
 
 it('is a read-only, countable, iterable map of answers', function () {
@@ -275,14 +282,16 @@ it('reads numeric answer ids and offsets as strings', function () {
 
 it('reads health, dropping what is not laya-shaped', function () {
     $health = layaRespondingWith(200, ['status' => 'ok', 'loaded' => ['english', 5, 'multilingual'], 'revisions' => ['english' => 'abc', 'multilingual' => null], 'device' => 'cpu'])->health();
-    $garbage = layaRespondingWith(200, ['status' => 'degraded', 'loaded' => 'english', 'revisions' => 'abc', 'device' => 5])->health();
+    $garbage = layaRespondingWith(200, ['status' => 'degraded', 'loaded' => 'english', 'revisions' => 'abc', 'device' => 5, 'idle_unload_seconds' => '600', 'idle_seconds' => true])->health();
 
     expect($health->loaded)->toBe(['english', 'multilingual'])
         ->and($health->revisions)->toBe(['english' => 'abc', 'multilingual' => null])
         ->and($garbage->ok)->toBeFalse()
         ->and($garbage->loaded)->toBe(['english'])
         ->and($garbage->revisions)->toBe([0 => 'abc'])
-        ->and($garbage->device)->toBe('auto');
+        ->and($garbage->device)->toBe('auto')
+        ->and($garbage->idleUnloadSeconds)->toBeNull()
+        ->and($garbage->idleSeconds)->toBeNull();
 });
 
 it('caches predictions by state, questions and model', function () {

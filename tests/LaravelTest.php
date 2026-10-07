@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -162,7 +163,15 @@ it('reports laya-serve health on the command line', function () {
         ->expectsOutputToContain('fake')
         ->expectsOutputToContain('none')
         ->doesntExpectOutputToContain('unhealthy')
+        ->doesntExpectOutputToContain('Idle')
         ->assertSuccessful();
+});
+
+it('shows the idle-unload window on the command line', function () {
+    app()->instance(Laya::class, layaRespondingWith(200, ['status' => 'ok', 'loaded' => [], 'device' => 'cpu', 'idle_unload_seconds' => 600, 'idle_seconds' => 712.5]));
+
+    expect(Artisan::call('laya:health'))->toBe(0)
+        ->and(Artisan::output())->toMatch('/Idle unload after\b.*\b600s\b/')->toMatch('/Idle for\b.*\b712\.5s\b/');
 });
 
 it('fails the health command when laya-serve is unhealthy or unreachable', function (int $status, array|string $body, string $output) {

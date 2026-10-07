@@ -59,7 +59,7 @@ LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed (se
 LAYA_EVENTS_INCLUDE_STATE=false
 ```
 
-`php artisan laya:health` prints the server's status and loaded checkpoints, and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
+`php artisan laya:health` prints the server's status and loaded checkpoints (plus the idle-unload window and idle time when laya-serve runs with `LAYA_IDLE_UNLOAD_SECONDS`, since an idle unload leaves "Loaded: none" on a healthy server), and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
 
 Inject it wherever you need it:
 
