@@ -15,31 +15,6 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
-/**
- * A Laya whose batch endpoint answers each state with LAYA_RESPONSE, routed to the state itself.
- *
- * @param  list<RequestInterface>  $sent
- */
-function layaBatching(array &$sent = [], ?Repository $cache = null): Laya
-{
-    $client = new class($sent) implements ClientInterface
-    {
-        /** @param list<RequestInterface> $sent */
-        public function __construct(private array &$sent) {}
-
-        public function sendRequest(RequestInterface $request): ResponseInterface
-        {
-            $this->sent[] = $request;
-            $body = json_decode((string) $request->getBody(), true);
-            $results = array_map(fn ($state) => ['routing' => ['model' => $state]] + LAYA_RESPONSE, $body['states'] ?? [$body['state']]);
-
-            return new Response(200, [], json_encode(isset($body['states']) ? ['results' => $results] : $results[0]));
-        }
-    };
-
-    return new Laya('http://laya.local', httpClient: $client, cache: $cache, cacheTtl: 60);
-}
-
 final class BatchTriage
 {
     public function __construct(

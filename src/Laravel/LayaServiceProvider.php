@@ -29,6 +29,8 @@ final class LayaServiceProvider extends ServiceProvider
                 apiKey: is_string($apiKey) && $apiKey !== '' ? $apiKey : null,
                 cache: is_string($store) && $store !== '' ? $this->app->make(CacheManager::class)->store($store) : null,
                 cacheTtl: is_numeric($ttl) ? (int) $ttl : null,
+                events: filter_var($config->get('laya.events.enabled'), FILTER_VALIDATE_BOOL) ? new EventDispatcher($this->app) : null,
+                includeState: filter_var($config->get('laya.events.include_state'), FILTER_VALIDATE_BOOL),
             );
         });
     }

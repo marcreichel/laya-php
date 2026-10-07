@@ -7,14 +7,18 @@ namespace MarcReichel\Laya;
 use Http\Discovery\Psr17FactoryDiscovery;
 use Http\Discovery\Psr18ClientDiscovery;
 use Illuminate\Container\Container;
+use MarcReichel\Laya\Events\PredictionFailed;
+use MarcReichel\Laya\Events\PredictionMade;
 use MarcReichel\Laya\Exceptions\AuthenticationException;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
+use MarcReichel\Laya\Exceptions\LayaException;
 use MarcReichel\Laya\Exceptions\ServerBusyException;
 use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Exceptions\TransportException;
 use MarcReichel\Laya\Exceptions\ValidationException;
 use MarcReichel\Laya\Testing\FakeHttpClient;
 use PHPUnit\Framework\Assert;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -54,6 +58,8 @@ final class Laya
      * @param  ClientInterface|null  $httpClient  any PSR-18 client; discovered when omitted
      * @param  CacheInterface|null  $cache  caches predictions by state, questions and model; laya is deterministic
      * @param  int|\DateInterval|null  $cacheTtl  null keeps entries as long as the cache does
+     * @param  EventDispatcherInterface|null  $events  receives a PredictionMade or PredictionFailed for every prediction
+     * @param  bool  $includeState  put the state on the events; off by default, since states may be sensitive
      */
     public function __construct(
         string $baseUrl = 'http://localhost:8000',
@@ -63,6 +69,8 @@ final class Laya
         ?StreamFactoryInterface $streamFactory = null,
         private readonly ?CacheInterface $cache = null,
         private readonly int|\DateInterval|null $cacheTtl = null,
+        private readonly ?EventDispatcherInterface $events = null,
+        private readonly bool $includeState = false,
     ) {
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->http = $httpClient ?? Psr18ClientDiscovery::find();
@@ -85,15 +93,27 @@ final class Laya
      *
      * In a Laravel app the fake also replaces the container's Laya, so injected code gets it too.
      *
+     * The fake dispatches PredictionMade like a real Laya, to $events (by default, the dispatcher of the
+     * container's Laya, so Event::fake() and listeners see them). Its predictions are never cached.
+     *
      * @param  array<string, string|int|float|bool|\BackedEnum|null>|object  $answers
+     * @param  bool|null  $includeState  null takes the container's setting, or false
      */
-    public static function fake(array|object $answers = []): self
+    public static function fake(array|object $answers = [], ?EventDispatcherInterface $events = null, ?bool $includeState = null): self
     {
         /** @var array<string, string|int|float|bool|\BackedEnum|null> $answers */
         $answers = is_object($answers) ? get_object_vars($answers) : $answers;
-        $fake = new self('http://laya.test', httpClient: new FakeHttpClient($answers));
+        $bound = class_exists(Container::class) && Container::getInstance()->bound(self::class);
+        /** @var self|null $current */
+        $current = $bound ? Container::getInstance()->make(self::class) : null;
+        $fake = new self(
+            'http://laya.test',
+            httpClient: new FakeHttpClient($answers),
+            events: $events ?? $current?->events,
+            includeState: $includeState ?? $current->includeState ?? false,
+        );
 
-        if (class_exists(Container::class) && Container::getInstance()->bound(self::class)) {
+        if ($bound) {
             Container::getInstance()->instance(self::class, $fake);
         }
 
@@ -115,12 +135,23 @@ final class Laya
         $key = self::cacheKey($json);
         $cached = $this->cache?->get($key);
         if (is_array($cached)) {
-            return Result::fromArray($cached);
+            $result = Result::fromArray($cached);
+            $this->events?->dispatch($this->made($state, $questions, $model, $result, true, 0.0));
+
+            return $result;
         }
 
-        $raw = $this->send($this->post('/v1/systemone', $json));
-        $result = Result::fromArray($raw);
+        $start = hrtime(true);
+        try {
+            $raw = $this->send($this->post('/v1/systemone', $json));
+            $result = Result::fromArray($raw);
+        } catch (LayaException $e) {
+            $this->failed($e, $state, $questions, $model, $start);
+
+            throw $e;
+        }
         $this->cache?->set($key, $raw, $this->cacheTtl);
+        $this->events?->dispatch($this->made($state, $questions, $model, $result, false, self::since($start)));
 
         return $result;
     }
@@ -153,28 +184,33 @@ final class Laya
             $key = self::cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen)));
             $cached = $this->cache?->get($key);
             // Placeholders keep the input order for the answers filled in below.
-            $results[$id] = is_array($cached) ? Result::fromArray($cached) : null;
-            if (! is_array($cached)) {
+            $results[$id] = null;
+            if (is_array($cached)) {
+                $results[$id] = Result::fromArray($cached);
+                $this->events?->dispatch($this->made($state, $questions, $model, $results[$id], true, 0.0));
+            } else {
                 $misses[$id] = $key;
             }
         }
 
         foreach (array_chunk($misses, self::BATCH_SIZE, preserve_keys: true) as $chunk) {
+            $sent = array_intersect_key($states, $chunk);
             // The batch endpoint takes the same controls as a single prediction and applies them to every state.
-            $body = $this->body(['states' => array_values(array_intersect_key($states, $chunk))], $wire, $model, $maxLen, $headMaxLen);
+            $body = $this->body(['states' => array_values($sent)], $wire, $model, $maxLen, $headMaxLen);
+            $start = hrtime(true);
             try {
-                $raw = $this->send($this->post('/v1/systemone/batch', self::json($body)));
-            } catch (ServerException $e) {
-                throw $e->status === 404 ? new ServerException('laya-serve has no batch endpoint; predictMany() needs laya-serve 0.3.22 or later.', 404, $e) : $e;
+                $answers = $this->sendBatch($body, count($chunk));
+                $parsed = array_map(Result::fromArray(...), $answers);
+            } catch (LayaException $e) {
+                $this->failed($e, $sent, $questions, $model, $start);
+
+                throw $e;
             }
-            $answers = $raw['results'] ?? null;
-            if (! is_array($answers) || ! array_is_list($answers) || count($answers) !== count($chunk)) {
-                throw new ServerException('The laya-serve batch response doesn\'t have one result per state.', 200);
-            }
+            $duration = self::since($start);
             foreach (array_keys($chunk) as $i => $id) {
-                $answer = is_array($answers[$i]) ? $answers[$i] : [];
-                $results[$id] = Result::fromArray($answer);
-                $this->cache?->set($chunk[$id], $answer, $this->cacheTtl);
+                $results[$id] = $parsed[$i];
+                $this->cache?->set($chunk[$id], $answers[$i], $this->cacheTtl);
+                $this->events?->dispatch($this->made($states[$id], $questions, $model, $parsed[$i], false, $duration));
             }
         }
 
@@ -260,6 +296,66 @@ final class Laya
     public function assertNothingPredicted(): void
     {
         $this->assertPredictedCount(0);
+    }
+
+    /**
+     * Sends one batch request and returns the $count answers, one per state.
+     *
+     * @param  array<string, mixed>  $body
+     * @return list<array<mixed>>
+     */
+    private function sendBatch(array $body, int $count): array
+    {
+        try {
+            $raw = $this->send($this->post('/v1/systemone/batch', self::json($body)));
+        } catch (ServerException $e) {
+            throw $e->status === 404 ? new ServerException('laya-serve has no batch endpoint; predictMany() needs laya-serve 0.3.22 or later.', 404, $e) : $e;
+        }
+        $answers = $raw['results'] ?? null;
+        if (! is_array($answers) || ! array_is_list($answers) || count($answers) !== $count) {
+            throw new ServerException('The laya-serve batch response doesn\'t have one result per state.', 200);
+        }
+
+        return array_map(fn (mixed $answer) => is_array($answer) ? $answer : [], $answers);
+    }
+
+    /**
+     * Only called when there's a dispatcher: `?->` skips building the event without one.
+     *
+     * @param  array<string, Question>  $questions
+     */
+    private function made(mixed $state, array $questions, ?Model $model, Result $result, bool $cached, float $durationMs): PredictionMade
+    {
+        return new PredictionMade(
+            array_keys($questions),
+            $model,
+            $result->routedModel,
+            $result->truncated,
+            $cached,
+            $durationMs,
+            $result->inputTokens,
+            $result,
+            $this->includeState ? $state : null,
+        );
+    }
+
+    /**
+     * Dispatches a PredictionFailed. A listener that throws mustn't replace $e, the error callers handle, so its exception is dropped.
+     *
+     * @param  array<string, Question>  $questions
+     */
+    private function failed(LayaException $e, mixed $state, array $questions, ?Model $model, int|float $start): void
+    {
+        try {
+            $this->events?->dispatch(new PredictionFailed(array_keys($questions), $model, $e, self::since($start), $this->includeState ? $state : null));
+        } catch (\Exception) {
+            // Only exceptions: an Error is a bug, and should surface.
+        }
+    }
+
+    private static function since(int|float $start): float
+    {
+        return (hrtime(true) - $start) / 1e6; // @pest-mutate-ignore nanoseconds to milliseconds; no test can pin a duration
     }
 
     /** @param array<string, Question> $questions */

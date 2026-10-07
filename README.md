@@ -55,6 +55,8 @@ LAYA_URL=http://localhost:8000
 LAYA_API_KEY=
 LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
+LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed (see Events)
+LAYA_EVENTS_INCLUDE_STATE=false
 ```
 
 `php artisan laya:health` prints the server's status and loaded checkpoints, and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
@@ -384,6 +386,48 @@ $laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400);
 ```
 
 The key doesn't include the checkpoint revision, so clear the cache (or set a TTL) when you upgrade `laya-serve`'s checkpoints.
+
+## Events
+
+To monitor predictions (timings, cache hits, routing, failures), pass any PSR-14 event dispatcher:
+
+```php
+$laya = new Laya('http://laya:8000', events: $psr14Dispatcher);
+```
+
+| Event | When | Payload |
+|---|---|---|
+| `PredictionMade` | after each `predict()`, and after each state of a `predictMany()` (so also `decide()`/`decideMany()`) | `questionIds`, `model` (pinned, or `null`), `routedModel`, `truncated`, `cached`, `durationMs`, `inputTokens`, `result` |
+| `PredictionFailed` | when a request to laya-serve fails, right before the exception is thrown; once per failed batch request | `questionIds`, `model`, `exception`, `durationMs` |
+
+Both are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. A question or decision class that is malformed throws before any request, without an event. If a `PredictionFailed` listener throws, its exception is dropped, so you still get the laya error.
+
+The events leave the state out, since it may be sensitive. Pass `includeState: true` to get it as `$event->state` (for a failed batch, the states of that request, keyed as you passed them). Without a dispatcher, no events are built.
+
+In Laravel, the service provider passes the app's event dispatcher, so listeners and `Event::fake()` work as usual:
+
+```php
+use MarcReichel\Laya\Events\PredictionMade;
+
+Event::listen(function (PredictionMade $event) {
+    Log::info('laya', ['model' => $event->routedModel, 'cached' => $event->cached, 'ms' => $event->durationMs]);
+});
+```
+
+Set `LAYA_EVENTS=false` to turn them off, or `LAYA_EVENTS_INCLUDE_STATE=true` to include the state.
+
+`Laya::fake()` dispatches `PredictionMade` too. In Laravel it uses the app's dispatcher and settings, so you can assert on the events in your tests:
+
+```php
+Event::fake();
+Laya::fake(['churn' => true]);
+
+ClassifyTicket::dispatchSync($ticket);
+
+Event::assertDispatched(PredictionMade::class);
+```
+
+Outside Laravel, pass a dispatcher: `Laya::fake([...], events: $psr14Dispatcher, includeState: true)`.
 
 ## Errors
 
