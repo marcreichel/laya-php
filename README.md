@@ -147,7 +147,7 @@ $laya->predict(['subject' => $mail->subject, 'body' => $mail->body], $questions)
 
 ### Picking a checkpoint
 
-By default, laya's router picks a checkpoint by language. To pin one:
+By default, laya's router picks a checkpoint by language. The request then carries `"model": "jev-latest"`, since TypeSafe's spec requires a model name: laya-serve routes for names it doesn't know, and sys1 reads it as the model it serves. To pin one:
 
 ```php
 use MarcReichel\Laya\Model;

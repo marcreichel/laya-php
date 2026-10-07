@@ -32,7 +32,8 @@ final class FakeHttpClient implements ClientInterface
 
         $body = self::array(json_decode((string) $request->getBody(), true, flags: JSON_THROW_ON_ERROR));
         $questions = self::array($body['questions'] ?? null);
-        $model = is_string($body['model'] ?? null) ? $body['model'] : null;
+        // Assertions get null for "let laya route", as callers wrote it.
+        $model = is_string($body['model'] ?? null) && $body['model'] !== Laya::AUTO_MODEL ? $body['model'] : null;
 
         // A batch records each state as its own prediction, so assertions don't care whether code batched.
         if (str_ends_with($request->getUri()->getPath(), '/batch')) {

@@ -179,4 +179,8 @@ it('sends the fields the client reads, or ones it knows how to do without', func
     foreach ($reads as $type => $fields) {
         expect(array_keys($answers[$type]['properties'] ?? []))->toContain(...$fields);
     }
+    // A choice or score answer without confidence has nothing to fall back to, and minConfidence would null it.
+    foreach (['choice', 'score'] as $type) {
+        expect($answers[$type]['required'] ?? [])->toContain('confidence');
+    }
 })->group('contract');

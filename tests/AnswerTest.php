@@ -37,7 +37,10 @@ it('derives a yes/no confidence from the probability when the server sends only 
         ->and($yes->confidence)->toBe(0.8)
         ->and($yes->answerConfidence)->toBe(0.8)
         ->and(YesNoAnswer::fromArray('c', ['noul' => 0.8, 'confidence' => '0.25'])->answerConfidence)->toBe(0.25)
-        ->and(YesNoAnswer::fromArray('c', ['noul' => 0.8, 'confidence' => 'n/a'])->confidence)->toBe(0.8);
+        ->and(YesNoAnswer::fromArray('c', ['noul' => 0.8, 'confidence' => 'n/a'])->confidence)->toBe(0.8)
+        ->and(YesNoAnswer::fromArray('c', ['noul' => '0.8'])->confidence)->toBe(0.8)
+        ->and(YesNoAnswer::fromArray('c', ['type' => 'noul'])->answerConfidence)->toBe(0.0)
+        ->and(YesNoAnswer::fromArray('c', ['noul' => 'n/a'])->answerConfidence)->toBe(0.0);
 });
 
 it('compares choices loosely, since JSON turns numeric labels into strings', function () {

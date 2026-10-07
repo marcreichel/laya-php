@@ -21,13 +21,18 @@ final readonly class YesNoAnswer extends Answer
 
     /**
      * TypeSafe's OpenAPI spec sends only the probability, so a missing confidence is laya's own: max(P(yes), P(no)).
+     * Without a probability either, the answer has no confidence.
      *
      * @param  array<mixed>  $raw
      */
     public static function fromArray(string $id, array $raw): self
     {
         $probability = self::float($raw, 'noul');
-        $confidence = is_numeric($raw['confidence'] ?? null) ? (float) $raw['confidence'] : max($probability, 1 - $probability);
+        $confidence = match (true) {
+            is_numeric($raw['confidence'] ?? null) => (float) $raw['confidence'],
+            is_numeric($raw['noul'] ?? null) => max($probability, 1 - $probability),
+            default => 0.0,
+        };
 
         return new self($probability, $confidence, self::answerConfidence($raw, $confidence), $raw);
     }

@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php: '8.4'
+          php-version: '8.4'
           coverage: none
       - run: composer install --no-interaction --no-progress
       - run: curl -fsSL --retry 3 https://api.typesafe.ai/openapi.json -o openapi.json
