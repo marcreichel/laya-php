@@ -400,7 +400,7 @@ $laya = new Laya('http://laya:8000', events: $psr14Dispatcher);
 | `PredictionMade` | after each `predict()`, and after each state of a `predictMany()` (so also `decide()`/`decideMany()`) | `questionIds`, `model` (pinned, or `null`), `routedModel`, `truncated`, `cached`, `durationMs`, `inputTokens`, `result` |
 | `PredictionFailed` | when a request to laya-serve fails, right before the exception is thrown; once per failed batch request | `questionIds`, `model`, `exception`, `durationMs` |
 
-Both are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. A question or decision class that is malformed throws before any request, without an event.
+Both are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. A question or decision class that is malformed throws before any request, without an event. If a `PredictionFailed` listener throws, its exception is dropped, so you still get the laya error.
 
 The events leave the state out, since it may be sensitive. Pass `includeState: true` to get it as `$event->state` (for a failed batch, the states of that request, keyed as you passed them). Without a dispatcher, no events are built.
 

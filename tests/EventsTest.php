@@ -14,6 +14,7 @@ use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Model;
 use MarcReichel\Laya\Question;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -228,6 +229,21 @@ it('dispatches nothing for invalid questions, which are never sent', function ()
     expect(fn () => layaBatching(events: $events)->predict('x', ['churn' => 'Cancel?']))->toThrow(InvalidQuestionException::class)
         ->and($events->events)->toBe([]);
 });
+
+it('throws the laya error, not a listener\'s, when a PredictionFailed listener fails', function (Closure $predict) {
+    $events = new class implements EventDispatcherInterface
+    {
+        public function dispatch(object $event): object
+        {
+            throw new RuntimeException('listener failed');
+        }
+    };
+
+    expect(fn () => $predict(layaRespondingWith(503, ['detail' => 'busy'], events: $events)))->toThrow(ServerBusyException::class, 'busy');
+})->with([
+    'predict' => [fn (Laya $laya) => $laya->predict('x', questions())],
+    'predictMany' => [fn (Laya $laya) => $laya->predictMany(['x'], questions())],
+]);
 
 it('predicts without a dispatcher', function () {
     expect(layaRespondingWith(200, LAYA_RESPONSE)->predict('x', ['churn' => Question::yesNo('Cancel?')])->yesNo('churn')->yes())->toBeTrue();

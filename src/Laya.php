@@ -134,7 +134,7 @@ final class Laya
             $raw = $this->send($this->post('/v1/systemone', $json));
             $result = Result::fromArray($raw);
         } catch (LayaException $e) {
-            $this->events?->dispatch(new PredictionFailed(array_keys($questions), $model, $e, self::since($start), $this->includeState ? $state : null));
+            $this->failed($e, $state, $questions, $model, $start);
 
             throw $e;
         }
@@ -190,7 +190,7 @@ final class Laya
                 $answers = $this->sendBatch($body, count($chunk));
                 $parsed = array_map(Result::fromArray(...), $answers);
             } catch (LayaException $e) {
-                $this->events?->dispatch(new PredictionFailed(array_keys($questions), $model, $e, self::since($start), $this->includeState ? $sent : null));
+                $this->failed($e, $sent, $questions, $model, $start);
 
                 throw $e;
             }
@@ -325,6 +325,20 @@ final class Laya
             $result,
             $this->includeState ? $state : null,
         );
+    }
+
+    /**
+     * Dispatches a PredictionFailed. A listener that throws mustn't replace $e, the error callers handle, so its exception is dropped.
+     *
+     * @param  array<string, Question>  $questions
+     */
+    private function failed(LayaException $e, mixed $state, array $questions, ?Model $model, int|float $start): void
+    {
+        try {
+            $this->events?->dispatch(new PredictionFailed(array_keys($questions), $model, $e, self::since($start), $this->includeState ? $state : null));
+        } catch (\Exception) {
+            // Only exceptions: an Error is a bug, and should surface.
+        }
     }
 
     private static function since(int|float $start): float
