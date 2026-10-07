@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Cache\Repository;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Question;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -15,7 +17,7 @@ use Psr\Http\Message\ResponseInterface;
  * @param  array<string, mixed>|string  $body
  * @param  list<RequestInterface>  $sent
  */
-function layaRespondingWith(int $status, array|string $body, array &$sent = [], ?string $apiKey = null): Laya
+function layaRespondingWith(int $status, array|string $body, array &$sent = [], ?string $apiKey = null, ?EventDispatcherInterface $events = null, bool $includeState = false): Laya
 {
     $client = new class($status, is_string($body) ? $body : json_encode($body), $sent) implements ClientInterface
     {
@@ -30,7 +32,46 @@ function layaRespondingWith(int $status, array|string $body, array &$sent = [], 
         }
     };
 
-    return new Laya('http://laya.local/', apiKey: $apiKey, httpClient: $client);
+    return new Laya('http://laya.local/', apiKey: $apiKey, httpClient: $client, events: $events, includeState: $includeState);
+}
+
+/** A PSR-14 dispatcher that keeps every event it's given. */
+final class RecordingDispatcher implements EventDispatcherInterface
+{
+    /** @var list<object> */
+    public array $events = [];
+
+    public function dispatch(object $event): object
+    {
+        $this->events[] = $event;
+
+        return $event;
+    }
+}
+
+/**
+ * A Laya whose batch endpoint answers each state with LAYA_RESPONSE, routed to the state itself.
+ *
+ * @param  list<RequestInterface>  $sent
+ */
+function layaBatching(array &$sent = [], ?Repository $cache = null, ?EventDispatcherInterface $events = null, bool $includeState = false): Laya
+{
+    $client = new class($sent) implements ClientInterface
+    {
+        /** @param list<RequestInterface> $sent */
+        public function __construct(private array &$sent) {}
+
+        public function sendRequest(RequestInterface $request): ResponseInterface
+        {
+            $this->sent[] = $request;
+            $body = json_decode((string) $request->getBody(), true);
+            $results = array_map(fn ($state) => ['routing' => ['model' => $state]] + LAYA_RESPONSE, $body['states'] ?? [$body['state']]);
+
+            return new Response(200, [], json_encode(isset($body['states']) ? ['results' => $results] : $results[0]));
+        }
+    };
+
+    return new Laya('http://laya.local', httpClient: $client, cache: $cache, cacheTtl: 60, events: $events, includeState: $includeState);
 }
 
 // A response in the exact shape laya's Router.predict() returns.
