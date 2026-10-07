@@ -31,6 +31,14 @@ final class HealthCommand extends Command
         $this->components->twoColumnDetail('Device', $health->device);
         $this->components->twoColumnDetail('Loaded', implode(', ', $health->loaded) ?: 'none');
 
+        if ($health->idleUnloadSeconds !== null) {
+            $this->components->twoColumnDetail('Idle unload after', $health->idleUnloadSeconds.'s');
+        }
+
+        if ($health->idleSeconds !== null) {
+            $this->components->twoColumnDetail('Idle for', $health->idleSeconds.'s');
+        }
+
         return $health->ok ? self::SUCCESS : self::FAILURE;
     }
 }

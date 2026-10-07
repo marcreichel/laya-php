@@ -162,6 +162,18 @@ it('reports laya-serve health on the command line', function () {
         ->expectsOutputToContain('fake')
         ->expectsOutputToContain('none')
         ->doesntExpectOutputToContain('unhealthy')
+        ->doesntExpectOutputToContain('Idle')
+        ->assertSuccessful();
+});
+
+it('shows the idle-unload window on the command line', function () {
+    app()->instance(Laya::class, layaRespondingWith(200, ['status' => 'ok', 'loaded' => [], 'device' => 'cpu', 'idle_unload_seconds' => 600, 'idle_seconds' => 712.5]));
+
+    $this->artisan('laya:health')
+        ->expectsOutputToContain('Idle unload after')
+        ->expectsOutputToContain('600s')
+        ->expectsOutputToContain('Idle for')
+        ->expectsOutputToContain('712.5s')
         ->assertSuccessful();
 });
 
