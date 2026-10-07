@@ -28,7 +28,7 @@ $triage->churn;      // true
 
 Under the hood this is an SDK for [Laya](https://github.com/NandhaKishorM/laya), a multilingual decision engine that answers typed questions (`choice`, `score`, yes/no) about any text in a single forward pass. Laya runs in Python, so the SDK talks to [`laya-serve`](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md), Laya's HTTP server, over any PSR-18 client.
 
-**Looking for Jev?** `laya-serve` speaks the same `POST /v1/systemone` protocol as TypeSafe's hosted [Jev](https://github.com/NandhaKishorM/laya#self-hosting-http-server-jev-compatible) API, with the same `choice`/`score`/`noul` answers, so this package is also a self-hosted Jev AI alternative for PHP. It targets `laya-serve` and hasn't been tested against the hosted Jev API.
+**Looking for Jev?** `laya-serve` speaks the same `POST /v1/systemone` protocol as TypeSafe's hosted [Jev](https://github.com/NandhaKishorM/laya#self-hosting-http-server-jev-compatible) API, with the same `choice`/`score`/`noul` answers, so this package is also a self-hosted Jev AI alternative for PHP. It targets `laya-serve`, and CI checks its requests and responses against TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json) on every change and weekly, so other `/v1/systemone` servers such as [sys1](https://github.com/alvarobartt/sys1) work too. It hasn't been tested against the hosted Jev API itself.
 
 ## Installation
 
@@ -134,6 +134,8 @@ if ($result->choice('department')->answerConfidence < 0.7) {
     $ticket->sendToHumanTriage();
 }
 ```
+
+Servers that only follow TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json), such as [sys1](https://github.com/alvarobartt/sys1), don't send an `answer_confidence`. Then `answerConfidence` falls back to `confidence`, and a yes/no answer without a `confidence` gets laya's own `max(P(yes), P(no))`. Thresholds and `minConfidence` keep working, though `confidence` is stricter than the calibrated value for choice and score answers.
 
 ### State
 
@@ -451,6 +453,9 @@ composer lint           # Pint
 
 docker compose up -d --wait
 LAYA_URL=http://localhost:8000 composer test:integration
+
+curl -fsSL https://api.typesafe.ai/openapi.json -o openapi.json
+LAYA_OPENAPI=openapi.json composer test:contract   # requests and responses against TypeSafe's spec
 ```
 
 ## License

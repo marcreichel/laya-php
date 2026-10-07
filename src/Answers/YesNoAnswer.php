@@ -19,10 +19,17 @@ final readonly class YesNoAnswer extends Answer
         parent::__construct($confidence, $answerConfidence, $raw);
     }
 
-    /** @param array<mixed> $raw */
+    /**
+     * TypeSafe's OpenAPI spec sends only the probability, so a missing confidence is laya's own: max(P(yes), P(no)).
+     *
+     * @param  array<mixed>  $raw
+     */
     public static function fromArray(string $id, array $raw): self
     {
-        return new self(self::float($raw, 'noul'), self::float($raw, 'confidence'), self::float($raw, 'answer_confidence'), $raw);
+        $probability = self::float($raw, 'noul');
+        $confidence = is_numeric($raw['confidence'] ?? null) ? (float) $raw['confidence'] : max($probability, 1 - $probability);
+
+        return new self($probability, $confidence, self::answerConfidence($raw, $confidence), $raw);
     }
 
     public function yes(float $threshold = 0.5): bool

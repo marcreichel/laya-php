@@ -47,6 +47,18 @@ const LAYA_RESPONSE = [
     'routing' => ['model' => 'english', 'reason' => 'latin script, english'],
 ];
 
+// A response in the shape of TypeSafe's OpenAPI spec (https://api.typesafe.ai/openapi.json), as sys1 sends it:
+// no answer_confidence, no confidence on yes/no answers, no routing.
+const TYPESAFE_RESPONSE = [
+    'model' => 'convaiinnovations/laya',
+    'answers' => [
+        'department' => ['type' => 'choice', 'choice' => 'billing', 'probabilities' => ['billing' => 0.988, 'technical' => 0.007, 'other' => 0.005], 'confidence' => 0.934],
+        'urgency' => ['type' => 'score', 'score' => 1.74, 'probabilities' => ['0' => 0.05, '1' => 0.16, '2' => 0.79], 'legend' => ['0' => 'not urgent', '1' => 'soon', '2' => 'blocking'], 'confidence' => 0.71],
+        'churn' => ['type' => 'noul', 'noul' => 0.83],
+    ],
+    'usage' => ['input_tokens' => 42, 'output_tokens' => 0],
+];
+
 function questions(): array
 {
     return [

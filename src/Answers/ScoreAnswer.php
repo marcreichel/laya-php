@@ -26,13 +26,15 @@ final readonly class ScoreAnswer extends Answer
     /** @param array<mixed> $raw */
     public static function fromArray(string $id, array $raw): self
     {
+        $confidence = self::float($raw, 'confidence');
+
         return new self(
             self::float($raw, 'score'),
             // laya keys both by level index ("0", "1", ...) in order.
             array_values(array_filter((array) ($raw['legend'] ?? []), is_string(...))),
             array_values(self::probabilities($raw)),
-            self::float($raw, 'confidence'),
-            self::float($raw, 'answer_confidence'),
+            $confidence,
+            self::answerConfidence($raw, $confidence),
             $raw,
         );
     }

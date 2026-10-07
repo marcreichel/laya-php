@@ -10,7 +10,8 @@ abstract readonly class Answer
 {
     /**
      * @param  float  $confidence  laya's per-type confidence (max probability, normalised for the option count)
-     * @param  float  $answerConfidence  the calibrated confidence; comparable across question types, so use it for gating
+     * @param  float  $answerConfidence  the calibrated confidence; comparable across question types, so use it for gating.
+     *                                   Servers that only follow TypeSafe's OpenAPI spec (e.g. sys1) don't send it; then it falls back to {@see $confidence}
      * @param  array<mixed>  $raw  the answer exactly as laya-serve returned it
      */
     public function __construct(
@@ -42,6 +43,16 @@ abstract readonly class Answer
         }
 
         return $probabilities;
+    }
+
+    /**
+     * answer_confidence, or $confidence when the server didn't send it: TypeSafe's OpenAPI spec has no such field.
+     *
+     * @param  array<mixed>  $raw
+     */
+    protected static function answerConfidence(array $raw, float $confidence): float
+    {
+        return is_numeric($raw['answer_confidence'] ?? null) ? (float) $raw['answer_confidence'] : $confidence;
     }
 
     /** @param array<mixed> $raw */
