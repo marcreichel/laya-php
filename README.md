@@ -61,6 +61,16 @@ LAYA_EVENTS_INCLUDE_STATE=false
 
 `php artisan laya:health` prints the server's status and loaded checkpoints (plus the idle-unload window and idle time when laya-serve runs with `LAYA_IDLE_UNLOAD_SECONDS`, since an idle unload leaves "Loaded: none" on a healthy server), and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
 
+`php artisan laya:try` runs a [decision class](#decisions-into-objects) on a piece of text and shows each parameter's question, hydrated value (`null` below `minConfidence`), answer confidence and the probability of every option, plus the routed checkpoint and a warning when the text was cut off. Use it to iterate on `#[Ask]` and `#[Describe]` wording:
+
+```bash
+php artisan laya:try "App\Decisions\Triage" "Hi, we were billed twice for March. Refund it today or we cancel."
+php artisan laya:try "Decisions\Triage" --file=ticket.txt   # short names resolve under App\
+echo "..." | php artisan laya:try "Decisions\Triage" --model=multilingual --json
+```
+
+It takes `--model=`, `--max-len=`, `--head-max-len=` and `--json`, and exits with 1 for an unknown or invalid class or an unreachable server.
+
 Inject it wherever you need it:
 
 ```php

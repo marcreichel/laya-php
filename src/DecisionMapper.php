@@ -41,6 +41,17 @@ final class DecisionMapper
      */
     public static function hydrate(string $class, Result $result): object
     {
+        return new $class(...self::values($class, $result));
+    }
+
+    /**
+     * The constructor arguments hydrate() passes: parameter name => value, null where laya is unsure.
+     *
+     * @param  class-string  $class
+     * @return array<string, bool|int|\BackedEnum|null>
+     */
+    public static function values(string $class, Result $result): array
+    {
         $arguments = [];
         foreach (self::parameters($class) as $parameter) {
             $name = $parameter->getName();
@@ -58,7 +69,7 @@ final class DecisionMapper
             };
         }
 
-        return new $class(...$arguments);
+        return $arguments;
     }
 
     /**
