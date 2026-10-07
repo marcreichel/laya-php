@@ -84,7 +84,38 @@ function openApiByType(array $spec, array $map): array
     return $byType;
 }
 
-/** Fails when $value has keys $schema doesn't declare, or lacks keys it requires. */
+/** Whether $schema accepts null: an untyped schema, type null (3.1) or nullable (3.0), directly or in a union. */
+function openApiAllowsNull(array $spec, mixed $schema): bool
+{
+    if (! is_array($schema)) {
+        return false;
+    }
+    if (isset($schema['$ref'])) {
+        return openApiAllowsNull($spec, openApiBranches($spec, ['$ref' => $schema['$ref']])[0] ?? ['type' => 'null']);
+    }
+    foreach (['oneOf', 'anyOf'] as $union) {
+        if (isset($schema[$union])) {
+            return array_any($schema[$union], fn ($part) => openApiAllowsNull($spec, $part));
+        }
+    }
+    if (isset($schema['allOf'])) {
+        return array_all($schema['allOf'], fn ($part) => openApiAllowsNull($spec, $part));
+    }
+
+    if (($schema['nullable'] ?? false) === true) {
+        return true;
+    }
+    if (array_key_exists('const', $schema)) {
+        return $schema['const'] === null;
+    }
+    if (isset($schema['enum'])) {
+        return in_array(null, $schema['enum'], true);
+    }
+
+    return in_array('null', (array) ($schema['type'] ?? 'null'), true);
+}
+
+/** Fails when $value has keys $schema doesn't declare, lacks keys it requires, or sends null where it isn't allowed. */
 function expectMatchesSchema(array $spec, mixed $schema, array $value, string $what): void
 {
     $branches = openApiBranches($spec, $schema);
@@ -94,6 +125,11 @@ function expectMatchesSchema(array $spec, mixed $schema, array $value, string $w
 
     expect(array_diff(array_keys($value), array_keys($properties)))->toBe([], "{$what} has fields the spec doesn't declare.")
         ->and(array_values(array_diff($required, array_keys($value))))->toBe([], "{$what} lacks fields the spec requires.");
+    foreach ($value as $key => $field) {
+        if ($field === null) {
+            expect(openApiAllowsNull($spec, $properties[$key]))->toBeTrue("{$what} sends null for \"{$key}\", which the spec doesn't allow: ".json_encode($properties[$key]));
+        }
+    }
 }
 
 it('sends requests that match the spec', function () {

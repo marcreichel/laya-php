@@ -63,11 +63,11 @@ it('posts the states with one shared set of questions and keeps their keys', fun
         ->and($results['t-7']->choice('department')->choice)->toBe('billing');
 });
 
-it('leaves the model out so laya routes each state by language', function () {
+it('sends a null model so laya routes each state by language', function () {
     $sent = [];
     layaBatching($sent)->predictMany(['Billed twice'], questions());
 
-    expect(json_decode((string) $sent[0]->getBody(), true))->not->toHaveKey('model');
+    expect(json_decode((string) $sent[0]->getBody(), true))->toHaveKey('model', null);
 });
 
 it('sends the token budgets for every state and caches them apart from unbudgeted predictions', function () {

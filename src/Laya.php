@@ -277,10 +277,8 @@ final class Laya
      */
     private function body(array $states, object $wire, ?Model $model, ?int $maxLen = null, ?int $headMaxLen = null): array
     {
-        $body = $states + ['questions' => $wire];
-        if ($model !== null) {
-            $body['model'] = $model->value;
-        }
+        // TypeSafe's spec requires model; laya-serve and sys1 both read null as "let the router pick".
+        $body = $states + ['questions' => $wire, 'model' => $model?->value];
         // laya-serve validates both (positive, <= LAYA_MAX_TOKEN_BUDGET) and answers 422.
         if ($maxLen !== null) {
             $body['max_len'] = $maxLen;
