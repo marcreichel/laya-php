@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php: ${{ matrix.php }}
+          php-version: ${{ matrix.php }}
           coverage: pcov
       - run: composer install --no-interaction --no-progress
       - run: vendor/bin/pint --test
