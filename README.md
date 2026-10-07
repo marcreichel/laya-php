@@ -38,7 +38,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to commit [`d8a2e59`](https://github.com/NandhaKishorM/laya/commit/d8a2e59781ca135169a36095056132e273cd9938)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to v0.3.29, commit [`e08843b`](https://github.com/NandhaKishorM/laya/commit/e08843b6255e7ef97aa408a67ca5e6b26920415e)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
@@ -135,7 +135,7 @@ if ($result->choice('department')->answerConfidence < 0.7) {
 }
 ```
 
-Servers that only follow TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json), such as [sys1](https://github.com/alvarobartt/sys1), don't send an `answer_confidence`. Then `answerConfidence` falls back to `confidence`, and a yes/no answer without a `confidence` gets laya's own `max(P(yes), P(no))`. Thresholds and `minConfidence` keep working, though `confidence` is stricter than the calibrated value for choice and score answers.
+Servers that only follow TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json), such as [sys1](https://github.com/alvarobartt/sys1), don't send an `answer_confidence`. Then `answerConfidence` falls back to `confidence`, and a yes/no answer without a `confidence` gets laya's own `max(P(yes), P(no))`. Thresholds and `minConfidence` keep working, though `confidence` is stricter than the calibrated value for choice and score answers. The same applies to laya-serve 0.3.24 or later started with `LAYA_JEV_STRICT=1`, which strips `answer_confidence`, `routing` and the truncation report from its responses, so `routedModel` is `null` and `truncated` is always `false` there.
 
 ### State
 
