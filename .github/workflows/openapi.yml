@@ -1,0 +1,25 @@
+name: OpenAPI contract
+
+# Checks the client against TypeSafe's OpenAPI spec, on every change and weekly, since the spec can change without us.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - run: curl -fsSL --retry 3 https://api.typesafe.ai/openapi.json -o openapi.json
+      - run: composer test:contract
+        env:
+          LAYA_OPENAPI: openapi.json

@@ -34,6 +34,14 @@ final class Laya
     /** laya-serve refuses batches of more states (MAX_BATCH_STATES). Pest can't cover a constant; the chunking test pins it. */
     private const int BATCH_SIZE = 64; // @pest-mutate-ignore
 
+    /**
+     * Sent when no Model is pinned. TypeSafe's spec requires a model name; laya-serve routes by language for any
+     * name it doesn't know, and sys1 accepts this alias for whatever it serves.
+     *
+     * @internal
+     */
+    public const string AUTO_MODEL = 'jev-latest';
+
     private readonly string $baseUrl;
 
     private readonly ClientInterface $http;
@@ -277,10 +285,7 @@ final class Laya
      */
     private function body(array $states, object $wire, ?Model $model, ?int $maxLen = null, ?int $headMaxLen = null): array
     {
-        $body = $states + ['questions' => $wire];
-        if ($model !== null) {
-            $body['model'] = $model->value;
-        }
+        $body = $states + ['questions' => $wire, 'model' => $model->value ?? self::AUTO_MODEL];
         // laya-serve validates both (positive, <= LAYA_MAX_TOKEN_BUDGET) and answers 422.
         if ($maxLen !== null) {
             $body['max_len'] = $maxLen;

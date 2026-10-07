@@ -26,6 +26,13 @@ it('answers from registered values and records predictions', function () {
     $laya->assertPredicted(fn ($state, $questions, $model) => $state === 'Billed twice' && $model === 'english');
 });
 
+it('passes a null model to assertions when laya routes', function () {
+    $laya = Laya::fake(['churn' => true]);
+    $laya->predict('Billed twice', ['churn' => Question::yesNo('Cancel?')]);
+
+    expect(fn () => $laya->assertPredicted(fn ($state, $questions, $model) => $model === null))->not->toThrow(AssertionFailedError::class);
+});
+
 it('fails loudly on unregistered questions and impossible answers', function () {
     expect(fn () => Laya::fake()->predict('x', ['churn' => Question::yesNo('Cancel?')]))->toThrow(LogicException::class, 'no answer for question "churn"')
         ->and(fn () => Laya::fake(['d' => 'sales'])->predict('x', ['d' => Question::choice('Dept?', ['billing'])]))->toThrow(LogicException::class, 'not one of its options')

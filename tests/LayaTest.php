@@ -41,11 +41,11 @@ it('posts state, questions and model to /v1/systemone with the bearer token', fu
         ->and(array_keys($body['questions']))->toBe(['department', 'urgency', 'churn']);
 });
 
-it('leaves the model out so laya routes by language', function () {
+it('sends the jev-latest alias as model so laya routes by language', function () {
     $sent = [];
     layaRespondingWith(200, LAYA_RESPONSE, $sent)->predict('Billed twice', questions());
 
-    expect(json_decode((string) $sent[0]->getBody(), true))->not->toHaveKey('model')
+    expect(json_decode((string) $sent[0]->getBody(), true))->toHaveKey('model', 'jev-latest')
         ->and($sent[0]->hasHeader('Authorization'))->toBeFalse();
 });
 
@@ -210,7 +210,7 @@ it('encodes the body as UTF-8 JSON, with questions as an object even when empty'
     $sent = [];
     layaRespondingWith(200, ['answers' => []], $sent)->predict('Müller zahlt doppelt', []);
 
-    expect((string) $sent[0]->getBody())->toBe('{"state":"Müller zahlt doppelt","questions":{}}')
+    expect((string) $sent[0]->getBody())->toBe('{"state":"Müller zahlt doppelt","questions":{},"model":"jev-latest"}')
         ->and(fn () => layaRespondingWith(200, LAYA_RESPONSE)->predict("\xB1", questions()))->toThrow(JsonException::class);
 });
 

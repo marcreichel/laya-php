@@ -31,7 +31,9 @@ final readonly class ChoiceAnswer extends Answer
             throw new ServerException(sprintf('Choice answer "%s" has no choice.', $id), 200);
         }
 
-        return new self($choice, self::probabilities($raw), self::float($raw, 'confidence'), self::float($raw, 'answer_confidence'), $raw);
+        $confidence = self::float($raw, 'confidence');
+
+        return new self($choice, self::probabilities($raw), $confidence, self::answerConfidence($raw, $confidence), $raw);
     }
 
     /** Whether the chosen label is $label. Compares loosely, since JSON turns numeric labels into strings. */

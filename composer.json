@@ -48,6 +48,7 @@
             "pest --mutate --everything --parallel --min=100"
         ],
         "test:integration": "pest --group=integration",
+        "test:contract": "pest --group=contract",
         "analyse": "phpstan analyse",
         "lint": "pint --test",
         "format": "pint"
