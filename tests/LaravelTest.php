@@ -117,6 +117,37 @@ it('lets Event::fake() and Event::listen() see the events, even when faked after
     Event::assertDispatched(PredictionFailed::class, fn (PredictionFailed $event) => $event->exception->getMessage() === 'laya-serve: boom (HTTP 500)');
 });
 
+it('dispatches the fake\'s events through the app\'s dispatcher, as configured', function () {
+    config(['laya.events.include_state' => true]);
+    Event::fake();
+
+    Laya::fake(['churn' => true]);
+    app(Laya::class)->predict('Cancel my plan.', ['churn' => Question::yesNo('Threatens to cancel?')]);
+
+    Event::assertDispatched(PredictionMade::class, fn (PredictionMade $event) => $event->state === 'Cancel my plan.' && $event->questionIds === ['churn']);
+});
+
+it('dispatches nothing from the fake when events are off', function () {
+    config(['laya.events.enabled' => false]);
+    Event::fake();
+
+    Laya::fake(['churn' => true])->predict('Cancel my plan.', ['churn' => Question::yesNo('Threatens to cancel?')]);
+
+    Event::assertNotDispatched(PredictionMade::class);
+});
+
+it('lets a fake\'s own dispatcher and include_state win over the app\'s', function () {
+    config(['laya.events.include_state' => true]);
+    Event::fake();
+    $events = new RecordingDispatcher;
+
+    Laya::fake(['churn' => true], events: $events, includeState: false)->predict('Cancel my plan.', ['churn' => Question::yesNo('Threatens to cancel?')]);
+
+    Event::assertNotDispatched(PredictionMade::class);
+    expect($events->events)->toHaveCount(1)
+        ->and($events->events[0]->state)->toBeNull();
+});
+
 it('returns the event it dispatched, as PSR-14 asks', function () {
     $event = new stdClass;
 

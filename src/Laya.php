@@ -93,15 +93,27 @@ final class Laya
      *
      * In a Laravel app the fake also replaces the container's Laya, so injected code gets it too.
      *
+     * The fake dispatches PredictionMade like a real Laya, to $events (by default, the dispatcher of the
+     * container's Laya, so Event::fake() and listeners see them). Its predictions are never cached.
+     *
      * @param  array<string, string|int|float|bool|\BackedEnum|null>|object  $answers
+     * @param  bool|null  $includeState  null takes the container's setting, or false
      */
-    public static function fake(array|object $answers = []): self
+    public static function fake(array|object $answers = [], ?EventDispatcherInterface $events = null, ?bool $includeState = null): self
     {
         /** @var array<string, string|int|float|bool|\BackedEnum|null> $answers */
         $answers = is_object($answers) ? get_object_vars($answers) : $answers;
-        $fake = new self('http://laya.test', httpClient: new FakeHttpClient($answers));
+        $bound = class_exists(Container::class) && Container::getInstance()->bound(self::class);
+        /** @var self|null $current */
+        $current = $bound ? Container::getInstance()->make(self::class) : null;
+        $fake = new self(
+            'http://laya.test',
+            httpClient: new FakeHttpClient($answers),
+            events: $events ?? $current?->events,
+            includeState: $includeState ?? $current->includeState ?? false,
+        );
 
-        if (class_exists(Container::class) && Container::getInstance()->bound(self::class)) {
+        if ($bound) {
             Container::getInstance()->instance(self::class, $fake);
         }
 

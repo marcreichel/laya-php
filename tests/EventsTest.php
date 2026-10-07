@@ -245,6 +245,29 @@ it('throws the laya error, not a listener\'s, when a PredictionFailed listener f
     'predictMany' => [fn (Laya $laya) => $laya->predictMany(['x'], questions())],
 ]);
 
+it('dispatches from a fake, for every state of a batch, without the state unless asked', function (?bool $includeState, ?string $state) {
+    $events = new RecordingDispatcher;
+    $laya = Laya::fake(['churn' => true], events: $events, includeState: $includeState);
+
+    $result = $laya->predict('Cancel now', ['churn' => Question::yesNo('Cancel?')], Model::English);
+    $laya->decideMany(['a' => 'Cancel now', 'b' => 'Thanks'], EventTriage::class);
+
+    expect($events->events)->toHaveCount(3)
+        ->and($events->events[0])->toBeInstanceOf(PredictionMade::class)
+        ->and($events->events[0]->result)->toBe($result)
+        ->and($events->events[0]->model)->toBe(Model::English)
+        ->and($events->events[0]->cached)->toBeFalse()
+        ->and($events->events[0]->state)->toBe($state)
+        ->and($events->events[2]->questionIds)->toBe(['churn']);
+})->with([
+    'by default' => [null, null],
+    'when asked' => [true, 'Cancel now'],
+]);
+
+it('dispatches nothing from a fake without a dispatcher', function () {
+    expect(Laya::fake(['churn' => true])->predict('x', ['churn' => Question::yesNo('Cancel?')])->yesNo('churn')->yes())->toBeTrue();
+});
+
 it('predicts without a dispatcher', function () {
     expect(layaRespondingWith(200, LAYA_RESPONSE)->predict('x', ['churn' => Question::yesNo('Cancel?')])->yesNo('churn')->yes())->toBeTrue();
 });

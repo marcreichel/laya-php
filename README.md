@@ -416,6 +416,19 @@ Event::listen(function (PredictionMade $event) {
 
 Set `LAYA_EVENTS=false` to turn them off, or `LAYA_EVENTS_INCLUDE_STATE=true` to include the state.
 
+`Laya::fake()` dispatches `PredictionMade` too. In Laravel it uses the app's dispatcher and settings, so you can assert on the events in your tests:
+
+```php
+Event::fake();
+Laya::fake(['churn' => true]);
+
+ClassifyTicket::dispatchSync($ticket);
+
+Event::assertDispatched(PredictionMade::class);
+```
+
+Outside Laravel, pass a dispatcher: `Laya::fake([...], events: $psr14Dispatcher, includeState: true)`.
+
 ## Errors
 
 Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`.
