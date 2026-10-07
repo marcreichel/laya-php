@@ -28,11 +28,8 @@ final readonly class YesNoAnswer extends Answer
     public static function fromArray(string $id, array $raw): self
     {
         $probability = self::float($raw, 'noul');
-        $confidence = match (true) {
-            is_numeric($raw['confidence'] ?? null) => (float) $raw['confidence'],
-            is_numeric($raw['noul'] ?? null) => max($probability, 1 - $probability),
-            default => 0.0,
-        };
+        $derived = is_numeric($raw['noul'] ?? null) ? max($probability, 1 - $probability) : 0.0;
+        $confidence = is_numeric($raw['confidence'] ?? null) ? (float) $raw['confidence'] : $derived;
 
         return new self($probability, $confidence, self::answerConfidence($raw, $confidence), $raw);
     }
