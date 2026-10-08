@@ -147,6 +147,26 @@ it('dispatches a PredictionMade for each state of a batch, hits first, misses wi
         ->and($c->durationMs)->toBe($a->durationMs);
 });
 
+it('dispatches a PredictionMade for every copy of an identical state, in input order', function () {
+    $events = new RecordingDispatcher;
+    $results = layaBatching(events: $events, includeState: true)->predictMany(['a' => 'x', 'b' => 'y', 'c' => 'x'], questions());
+
+    [$a, $b, $c] = $events->events;
+    expect($events->events)->toHaveCount(3)
+        ->and([$a->state, $b->state, $c->state])->toBe(['x', 'y', 'x'])
+        ->and($c->cached)->toBeFalse()
+        ->and($c->result)->toBe($results['c'])->toBe($a->result)
+        ->and($c->durationMs)->toBe($a->durationMs)->toBe($b->durationMs);
+});
+
+it('lists every copy on the PredictionFailed of a batch', function () {
+    $events = new RecordingDispatcher;
+
+    expect(fn () => layaRespondingWith(404, ['detail' => 'Not Found'], events: $events, includeState: true)->predictMany(['a' => 'x', 'b' => 'y', 'c' => 'x'], questions()))
+        ->toThrow(ServerException::class)
+        ->and($events->events[0]->state)->toBe(['a' => 'x', 'b' => 'y', 'c' => 'x']);
+});
+
 it('leaves the states of a batch off its events unless asked', function () {
     $events = new RecordingDispatcher;
     layaBatching(events: $events)->predictMany(['a' => 'new'], questions());
@@ -205,11 +225,12 @@ it('only sends the states of the failed request on its event', function () {
         }
     }, events: $events, includeState: true);
 
-    expect(fn () => $laya->predictMany(array_map(fn ($i) => "state $i", range(0, 65)), questions()))->toThrow(ServerException::class, 'boom')
-        ->and($events->events)->toHaveCount(65)
-        ->and($events->events[63])->toBeInstanceOf(PredictionMade::class)
-        ->and($events->events[64])->toBeInstanceOf(PredictionFailed::class)
-        ->and($events->events[64]->state)->toBe([64 => 'state 64', 65 => 'state 65']);
+    // 66 distinct states, each twice: the copies of the second request's states are on its event too.
+    expect(fn () => $laya->predictMany(array_map(fn ($i) => 'state '.($i % 66), range(0, 131)), questions()))->toThrow(ServerException::class, 'boom')
+        ->and($events->events)->toHaveCount(129)
+        ->and($events->events[127])->toBeInstanceOf(PredictionMade::class)
+        ->and($events->events[128])->toBeInstanceOf(PredictionFailed::class)
+        ->and($events->events[128]->state)->toBe([64 => 'state 64', 65 => 'state 65', 130 => 'state 64', 131 => 'state 65']);
 });
 
 it('dispatches from decide() and decideMany()', function () {
