@@ -35,19 +35,21 @@ final class FakeHttpClient implements ClientInterface
         // Assertions get null for "let laya route", as callers wrote it.
         $model = is_string($body['model'] ?? null) && $body['model'] !== Laya::AUTO_MODEL ? $body['model'] : null;
 
+        $minConfidence = $body['min_confidence'] ?? null;
+
         // A batch records each state as its own prediction, so assertions don't care whether code batched.
         if (str_ends_with($request->getUri()->getPath(), '/batch')) {
-            return $this->json(['results' => array_map(fn (mixed $state) => $this->predict($state, $questions, $model), self::array($body['states'] ?? null))]);
+            return $this->json(['results' => array_map(fn (mixed $state) => $this->predict($state, $questions, $model, $minConfidence), self::array($body['states'] ?? null))]);
         }
 
-        return $this->json($this->predict($body['state'] ?? null, $questions, $model));
+        return $this->json($this->predict($body['state'] ?? null, $questions, $model, $minConfidence));
     }
 
     /**
      * @param  array<mixed>  $questions
      * @return array<string, mixed>
      */
-    private function predict(mixed $state, array $questions, ?string $model): array
+    private function predict(mixed $state, array $questions, ?string $model, mixed $minConfidence): array
     {
         $this->requests[] = ['state' => $state, 'questions' => $questions, 'model' => $model];
 
@@ -55,7 +57,8 @@ final class FakeHttpClient implements ClientInterface
         foreach ($questions as $id => $question) {
             // predict() only sends string ids; the cast is for static analysis.
             $id = (string) $id; // @pest-mutate-ignore: RemoveStringCast
-            $answers[$id] = $this->answer($id, self::array($question), $this->registered($id));
+            $answer = $this->answer($id, self::array($question), $this->registered($id));
+            $answers[$id] = $minConfidence === null ? $answer : self::gate($answer, $minConfidence);
         }
 
         return [
@@ -132,6 +135,47 @@ final class FakeHttpClient implements ClientInterface
 
                 return ['type' => 'noul', 'noul' => $p, 'confidence' => max($p, 1 - $p), 'answer_confidence' => max($p, 1 - $p)];
         }
+    }
+
+    /**
+     * laya-serve's abstention report. The fake's answers always carry an answer_confidence, so none is unevaluated.
+     *
+     * @param  array<string, mixed>  $answer
+     * @return array<string, mixed>
+     */
+    private static function gate(array $answer, mixed $minConfidence): array
+    {
+        /** @var float|int $threshold Laya validated it before sending: a threshold, or a map of them with a fallback of 0.0 */
+        $threshold = is_array($minConfidence) ? ($minConfidence[self::bucket($answer)] ?? $minConfidence['default'] ?? 0.0) : $minConfidence;
+        $threshold = (float) $threshold;
+        /** @var float $confidence answer() always sets it */
+        $confidence = $answer['answer_confidence'];
+        $low = $confidence < $threshold;
+
+        return $answer + ($low ? ['low_confidence' => true] : []) + ['abstention' => $low ? 'abstained' : 'passed', 'abstention_threshold' => $threshold];
+    }
+
+    /**
+     * The answer's bucket in a minConfidence map, by type and option count: "choice:3-5", "noul:2", ...
+     *
+     * @param  array<string, mixed>  $answer
+     */
+    private static function bucket(array $answer): string
+    {
+        // Yes/no answers carry no probabilities; they have two options.
+        if (! is_array($answer['probabilities'] ?? null)) {
+            return 'noul:2';
+        }
+        /** @var string $type */
+        $type = $answer['type'];
+        $options = count($answer['probabilities']);
+        foreach ([2 => '2', 5 => '3-5', 10 => '6-10'] as $max => $size) {
+            if ($options <= $max) {
+                return $type.':'.$size;
+            }
+        }
+
+        return $type.':11+';
     }
 
     /**

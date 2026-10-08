@@ -10,6 +10,7 @@ use Illuminate\Container\Container;
 use MarcReichel\Laya\Events\PredictionFailed;
 use MarcReichel\Laya\Events\PredictionMade;
 use MarcReichel\Laya\Exceptions\AuthenticationException;
+use MarcReichel\Laya\Exceptions\InvalidOptionException;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Exceptions\LayaException;
 use MarcReichel\Laya\Exceptions\ServerBusyException;
@@ -45,6 +46,9 @@ final class Laya
      * @internal
      */
     public const string AUTO_MODEL = 'jev-latest';
+
+    /** The keys of a minConfidence map: core's temp_bucket spelling, type and option count, or "default". */
+    private const string BUCKET = '/^(?:(?:choice|score|noul):(?:2|3-5|6-10|11\+)|default)$/D';
 
     private readonly string $baseUrl;
 
@@ -129,10 +133,14 @@ final class Laya
      * @param  Model|null  $model  pin a checkpoint; null lets laya's router pick by language
      * @param  int|null  $maxLen  token budget for the state; longer states are cut off (laya-serve >= 0.3.21)
      * @param  int|null  $headMaxLen  token budget for each question and its options (laya-serve >= 0.3.21)
+     * @param  float|array<string, float>|null  $minConfidence  laya-serve's abstention gate: one threshold from 0 to 1, or a map of
+     *                                                          threshold per option-count bucket ("choice:2", "choice:3-5", "score:6-10",
+     *                                                          "noul:2", ..., and "default"). Answers report the gate's decision
      */
-    public function predict(string|array|\JsonSerializable $state, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): Result
+    public function predict(string|array|\JsonSerializable $state, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): Result
     {
-        $json = self::json($this->body(['state' => $state], self::wire($questions), $model, $maxLen, $headMaxLen));
+        self::assertMinConfidence($minConfidence);
+        $json = self::json($this->body(['state' => $state], self::wire($questions), $model, $maxLen, $headMaxLen, $minConfidence));
         $key = self::cacheKey($json);
         $cached = $this->cache?->get($key);
         if (is_array($cached)) {
@@ -174,15 +182,17 @@ final class Laya
      * @param  array<string, Question>  $questions
      * @param  int|null  $maxLen  token budget for each state (laya-serve >= 0.3.23)
      * @param  int|null  $headMaxLen  token budget for each question and its options (laya-serve >= 0.3.23)
+     * @param  float|array<string, float>|null  $minConfidence  laya-serve's abstention gate, for every state; see predict()
      * @return array<K, Result>
      */
-    public function predictMany(array $states, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): array
+    public function predictMany(array $states, array $questions, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): array
     {
         $wire = self::wire($questions);
+        self::assertMinConfidence($minConfidence);
         $results = [];
         $misses = [];
         foreach ($states as $id => $state) {
-            $key = self::cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen)));
+            $key = self::cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen, $minConfidence)));
             $cached = $this->cache?->get($key);
             // Placeholders keep the input order for the answers filled in below.
             $results[$id] = null;
@@ -197,7 +207,7 @@ final class Laya
         foreach (array_chunk($misses, self::BATCH_SIZE, preserve_keys: true) as $chunk) {
             $sent = array_intersect_key($states, $chunk);
             // The batch endpoint takes the same controls as a single prediction and applies them to every state.
-            $body = $this->body(['states' => array_values($sent)], $wire, $model, $maxLen, $headMaxLen);
+            $body = $this->body(['states' => array_values($sent)], $wire, $model, $maxLen, $headMaxLen, $minConfidence);
             $start = hrtime(true);
             try {
                 $answers = $this->sendBatch($body, count($chunk));
@@ -235,11 +245,12 @@ final class Laya
      *
      * @param  string|array<mixed>|\JsonSerializable  $state
      * @param  class-string<T>  $class
+     * @param  float|array<string, float>|null  $minConfidence  laya-serve's abstention gate; see predict(). #[Ask(minConfidence: ...)] is the client-side one
      * @return T
      */
-    public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): object
+    public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): object
     {
-        return DecisionMapper::hydrate($class, $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen));
+        return DecisionMapper::hydrate($class, $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence));
     }
 
     /**
@@ -252,11 +263,12 @@ final class Laya
      *
      * @param  array<K, string|array<mixed>|\JsonSerializable>  $states
      * @param  class-string<T>  $class
+     * @param  float|array<string, float>|null  $minConfidence  laya-serve's abstention gate, for every state; see predict()
      * @return array<K, T>
      */
-    public function decideMany(array $states, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null): array
+    public function decideMany(array $states, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): array
     {
-        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $this->predictMany($states, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen));
+        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $this->predictMany($states, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence));
     }
 
     public function health(): HealthStatus
@@ -378,9 +390,10 @@ final class Laya
 
     /**
      * @param  array{state: mixed}|array{states: list<mixed>}  $states  one state, or a batch's states
+     * @param  float|array<mixed>|null  $minConfidence
      * @return array<string, mixed>
      */
-    private function body(array $states, object $wire, ?Model $model, ?int $maxLen = null, ?int $headMaxLen = null): array
+    private function body(array $states, object $wire, ?Model $model, ?int $maxLen, ?int $headMaxLen, float|array|null $minConfidence): array
     {
         $body = $states + ['questions' => $wire, 'model' => $model->value ?? self::AUTO_MODEL];
         // laya-serve validates both (positive, <= LAYA_MAX_TOKEN_BUDGET) and answers 422.
@@ -390,8 +403,42 @@ final class Laya
         if ($headMaxLen !== null) {
             $body['head_max_len'] = $headMaxLen;
         }
+        // Absent, laya-serve runs no gate and its answers carry no abstention report.
+        if ($minConfidence !== null) {
+            $body['min_confidence'] = $minConfidence;
+        }
 
         return $body;
+    }
+
+    /**
+     * Refuses what laya-serve's check_min_confidence refuses (with a 422), before any inference is paid for.
+     *
+     * @param  float|array<mixed>|null  $minConfidence
+     */
+    private static function assertMinConfidence(float|array|null $minConfidence): void
+    {
+        if (is_float($minConfidence)) {
+            self::assertThreshold('minConfidence', $minConfidence);
+        } elseif ($minConfidence === []) {
+            throw new InvalidOptionException('A minConfidence map needs at least one bucket.');
+        } elseif ($minConfidence !== null) {
+            foreach ($minConfidence as $bucket => $threshold) {
+                // A bucket no answer can fall into would gate nothing; laya-serve >= 0.3.29 refuses it too.
+                if (preg_match(self::BUCKET, (string) $bucket) !== 1) {
+                    throw new InvalidOptionException(sprintf('minConfidence has no bucket "%s". Use "default", or a type and option count: "choice:2", "choice:3-5", "score:6-10", "noul:11+" and so on.', $bucket));
+                }
+                self::assertThreshold(sprintf('minConfidence["%s"]', $bucket), $threshold);
+            }
+        }
+    }
+
+    private static function assertThreshold(string $name, mixed $threshold): void
+    {
+        // NaN fails both comparisons.
+        if (! (is_float($threshold) || is_int($threshold)) || ! ($threshold >= 0 && $threshold <= 1)) {
+            throw new InvalidOptionException(sprintf('%s must be a number from 0 to 1, got %s.', $name, var_export($threshold, true)));
+        }
     }
 
     /** @param array<string, mixed> $body */
