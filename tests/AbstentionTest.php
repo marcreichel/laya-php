@@ -13,6 +13,8 @@ use MarcReichel\Laya\Exceptions\InvalidOptionException;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Question;
 
+require_once __DIR__.'/Fixtures/Decisions.php';
+
 it('sends min_confidence only when set', function () {
     $sent = [];
     $laya = layaRespondingWith(200, LAYA_RESPONSE, $sent);
