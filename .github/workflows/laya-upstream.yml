@@ -1,0 +1,85 @@
+name: Laya upstream
+
+# Checks whether compose.yaml pins an older commit than upstream Laya's latest release, and opens an issue when it does.
+# The pin is bumped deliberately (integration tests need the real checkpoints), so this reports instead of bumping.
+on:
+  pull_request:
+    paths:
+      - compose.yaml
+      - README.md
+      - .github/workflows/laya-upstream.yml
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: NandhaKishorM/laya
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the pinned commit
+        id: pin
+        run: |
+          pinned=$(grep -oE 'laya\.git#[0-9a-f]{40}' compose.yaml | cut -d'#' -f2)
+          if [ -z "$pinned" ]; then
+            echo "::error file=compose.yaml::No pinned Laya commit (laya.git#<40-char sha>) found."
+            exit 1
+          fi
+          if ! grep -q "$pinned" README.md; then
+            echo "::error file=README.md::README.md doesn't link the commit compose.yaml pins ($pinned)."
+            exit 1
+          fi
+          echo "sha=$pinned" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with the latest release
+        id: compare
+        env:
+          PINNED: ${{ steps.pin.outputs.sha }}
+        run: |
+          tag=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+          # base...head: "ahead" means the release has commits the pin doesn't.
+          comparison=$(gh api "repos/$UPSTREAM/compare/$PINNED...$tag" --jq '"\(.status) \(.ahead_by)"')
+          read -r status ahead_by <<< "$comparison"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Pinned ${PINNED:0:7}; latest release $tag; $status ($ahead_by commit(s) the pin lacks)." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" = ahead ] || [ "$status" = diverged ]; then
+            echo "behind=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::compose.yaml pins ${PINNED:0:7}, which is behind Laya $tag by $ahead_by commit(s)."
+          fi
+
+      - name: Open an upgrade issue
+        if: steps.compare.outputs.behind == 'true' && github.event_name != 'pull_request'
+        env:
+          PINNED: ${{ steps.pin.outputs.sha }}
+          TAG: ${{ steps.compare.outputs.tag }}
+        run: |
+          title="Upgrade to Laya $TAG"
+          # Every state, so an issue closed as not planned isn't filed again each week.
+          titles=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$title\" in:title" --json title --jq '.[].title')
+          if grep -Fxq -- "$title" <<< "$titles"; then
+            echo "An issue titled \"$title\" already exists."
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file - <<EOF
+          Laya [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG) is out. \`compose.yaml\` pins [\`${PINNED:0:7}\`](https://github.com/$UPSTREAM/commit/$PINNED).
+
+          Changes since the pin: https://github.com/$UPSTREAM/compare/$PINNED...$TAG
+
+          ## Tasks
+
+          - [ ] Read the changes for anything that affects the SDK: the \`laya-serve\` HTTP protocol (\`laya/serve.py\`, \`docs/http-api.md\`), routing defaults, limits
+          - [ ] Bump the pinned commit in \`compose.yaml\` and \`README.md\`
+          - [ ] Run \`composer test:integration\` and \`composer test:contract\` against $TAG
+          - [ ] Update the README and \`Laya::fake()\` for any behaviour change
+
+          ---
+          _Opened by the [Laya upstream](https://github.com/$GITHUB_REPOSITORY/actions/workflows/laya-upstream.yml) workflow._
+          EOF

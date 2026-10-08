@@ -13,11 +13,12 @@ jobs:
       matrix:
         php: ['8.4', '8.5']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: pcov
+      - run: composer validate --strict
       - run: composer install --no-interaction --no-progress
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress
