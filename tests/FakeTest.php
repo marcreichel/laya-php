@@ -3,10 +3,26 @@
 declare(strict_types=1);
 
 use Illuminate\Container\Container;
+use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Model;
 use MarcReichel\Laya\Question;
 use PHPUnit\Framework\AssertionFailedError;
+
+enum Desk: string
+{
+    case Billing = 'billing';
+    case Technical = 'technical';
+    case Other = 'other';
+}
+
+final readonly class Routing
+{
+    public function __construct(
+        #[Ask('Which desk?')] public Desk $desk,
+        #[Ask('Threatens to cancel?')] public bool $churn,
+    ) {}
+}
 
 it('answers from registered values and records predictions', function () {
     $laya = Laya::fake(['dept' => 'billing', 'urgency' => 1, 'churn' => 0.3]);
@@ -120,4 +136,70 @@ it('answers null as unsure: even probabilities, zero confidence', function () {
 
 it('answers an unsure numeric choice with a string label', function () {
     expect(Laya::fake(['code' => null])->predict('x', ['code' => Question::choice('Code?', [1, 2])])->choice('code')->choice)->toBe('1');
+});
+
+it('answers matching states from the first matching when() rule, over the defaults', function () {
+    $laya = Laya::fake(['desk' => 'other', 'churn' => false])
+        ->when(fn ($state) => str_contains($state, 'refund'), ['desk' => 'billing', 'churn' => true])
+        ->when(fn ($state) => str_contains($state, 'refund') || str_contains($state, 'outage'), new Routing(Desk::Technical, churn: false))
+        ->when(fn ($state) => str_contains($state, 'invoice'), ['desk' => 'billing']);
+
+    $routings = $laya->decideMany(['A refund, or I cancel', 'An outage', 'Hello', 'An invoice'], Routing::class);
+
+    expect(array_map(fn (Routing $r) => [$r->desk, $r->churn], $routings))->toBe([
+        [Desk::Billing, true],
+        [Desk::Technical, false],
+        [Desk::Other, false],
+        [Desk::Billing, false],
+    ]);
+});
+
+it('answers in sequence, over the defaults, and throws when the sequence runs out', function () {
+    $laya = Laya::fake(['churn' => false])
+        ->when(fn ($state) => $state === 'vip', ['desk' => 'other'])
+        ->sequence(['desk' => 'billing'], new Routing(Desk::Technical, churn: true))
+        ->sequence(['desk' => 'other']);
+
+    $routings = $laya->decideMany(['a', 'vip', 'b'], Routing::class);
+
+    expect(array_map(fn (Routing $r) => [$r->desk, $r->churn], $routings))->toBe([
+        [Desk::Billing, false],
+        [Desk::Other, false],
+        [Desk::Technical, true],
+    ])
+        ->and($laya->decide('c', Routing::class)->desk)->toBe(Desk::Other)
+        ->and(fn () => $laya->decide('d', Routing::class))->toThrow(LogicException::class, 'Laya::fake()->sequence() ran out');
+});
+
+it('only takes rules and sequences on a fake', function () {
+    expect(fn () => layaRespondingWith(200, [])->when(fn () => true, []))->toThrow(LogicException::class, 'Laya::fake()')
+        ->and(fn () => layaRespondingWith(200, [])->sequence([]))->toThrow(LogicException::class, 'Laya::fake()');
+});
+
+it('asserts predictions that were not made', function () {
+    $laya = Laya::fake(['churn' => true]);
+
+    expect(fn () => $laya->assertNotPredicted())->not->toThrow(AssertionFailedError::class);
+
+    $laya->predict('public', ['churn' => Question::yesNo('Cancel?')]);
+
+    expect(fn () => $laya->assertNotPredicted(fn ($state, $questions, $model) => $state === 'secret' && $model === null))->not->toThrow(AssertionFailedError::class)
+        ->and(fn () => $laya->assertNotPredicted(fn ($state, $questions, $model) => $state === 'public' && isset($questions['churn']) && $model === null))->toThrow(AssertionFailedError::class, 'Expected no matching laya prediction, but 1 were made.')
+        ->and(fn () => $laya->assertNotPredicted())->toThrow(AssertionFailedError::class);
+});
+
+it('asserts decisions that were not made, and how many were', function () {
+    $laya = Laya::fake(['desk' => 'billing', 'churn' => true]);
+    $laya->predict('x', ['churn' => Question::yesNo('Threatens to cancel?')]);
+
+    expect(fn () => $laya->assertNotDecided(Routing::class))->not->toThrow(AssertionFailedError::class)
+        ->and(fn () => $laya->assertDecidedCount(Routing::class, 0))->not->toThrow(AssertionFailedError::class);
+
+    $laya->decideMany(['a', 'b'], Routing::class);
+
+    expect(fn () => $laya->assertDecidedCount(Routing::class, 2))->not->toThrow(AssertionFailedError::class)
+        ->and(fn () => $laya->assertDecidedCount(Routing::class, 1))->toThrow(AssertionFailedError::class, 'Expected Routing to be decided 1 time(s), but it was decided 2 time(s).')
+        ->and(fn () => $laya->assertNotDecided(Routing::class, fn ($state, $model) => $state === 'c' && $model === null))->not->toThrow(AssertionFailedError::class)
+        ->and(fn () => $laya->assertNotDecided(Routing::class, fn ($state, $model) => $state === 'a' && $model === null))->toThrow(AssertionFailedError::class, 'Expected Routing not to be decided, but it was decided 1 time(s).')
+        ->and(fn () => $laya->assertNotDecided(Routing::class))->toThrow(AssertionFailedError::class, 'decided 2 time(s)');
 });

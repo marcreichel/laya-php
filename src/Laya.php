@@ -97,6 +97,8 @@ final class Laya
      *
      *     $laya = Laya::fake(new Triage(Department::Billing, urgency: 2, churn: true));
      *
+     * Give some states other answers with when(), or answer in order with sequence().
+     *
      * In a Laravel app the fake also replaces the container's Laya, so injected code gets it too.
      *
      * The fake dispatches PredictionMade like a real Laya, to $events (by default, the dispatcher of the
@@ -107,8 +109,6 @@ final class Laya
      */
     public static function fake(array|object $answers = [], ?EventDispatcherInterface $events = null, ?bool $includeState = null): self
     {
-        /** @var array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null> $answers */
-        $answers = is_object($answers) ? get_object_vars($answers) : $answers;
         $bound = class_exists(Container::class) && Container::getInstance()->bound(self::class);
         /** @var self|null $current */
         $current = $bound ? Container::getInstance()->make(self::class) : null;
@@ -124,6 +124,35 @@ final class Laya
         }
 
         return $fake;
+    }
+
+    /**
+     * Answer states that match $matches with $answers, merged over the fake's defaults. The first matching rule wins,
+     * and a batch matches each state on its own. Faked clients only.
+     *
+     *     Laya::fake(['department' => 'other'])->when(fn ($state) => str_contains($state, 'refund'), ['department' => 'billing']);
+     *
+     * @param  callable(mixed $state): bool  $matches
+     * @param  array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null>|object  $answers
+     */
+    public function when(callable $matches, array|object $answers): self
+    {
+        $this->fakeClient()->when($matches, $answers);
+
+        return $this;
+    }
+
+    /**
+     * Answer the next states (that no when() rule matches) with these answers in order, each merged over the fake's
+     * defaults. Once they are used up, the fake throws. Faked clients only.
+     *
+     * @param  array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null>|object  ...$answers
+     */
+    public function sequence(array|object ...$answers): self
+    {
+        $this->fakeClient()->sequence(...$answers);
+
+        return $this;
     }
 
     /**
@@ -281,8 +310,18 @@ final class Laya
      */
     public function assertPredicted(?callable $callback = null): void
     {
-        $matching = array_filter($this->fakeClient()->requests, fn (array $r) => $callback === null || $callback($r['state'], $r['questions'], $r['model']));
-        self::assert($matching !== [], 'Expected a matching laya prediction, but none was made.');
+        self::assert($this->predictions($callback) !== [], 'Expected a matching laya prediction, but none was made.');
+    }
+
+    /**
+     * Assert no prediction was made (matching $callback, if given). Faked clients only.
+     *
+     * @param  (callable(mixed $state, array<array-key, mixed> $questions, ?string $model): bool)|null  $callback
+     */
+    public function assertNotPredicted(?callable $callback = null): void
+    {
+        $actual = count($this->predictions($callback));
+        self::assert($actual === 0, sprintf('Expected no matching laya prediction, but %d were made.', $actual));
     }
 
     /**
@@ -293,9 +332,30 @@ final class Laya
      */
     public function assertDecided(string $class, ?callable $callback = null): void
     {
-        $questions = json_decode(json_encode(array_map(fn (Question $q) => $q->toArray(), DecisionMapper::questions($class)), JSON_THROW_ON_ERROR), true);
-        $matching = array_filter($this->fakeClient()->requests, fn (array $r) => $r['questions'] === $questions && ($callback === null || $callback($r['state'], $r['model'])));
-        self::assert($matching !== [], sprintf('Expected %s to be decided, but it wasn\'t.', $class));
+        self::assert($this->decisions($class, $callback) !== [], sprintf('Expected %s to be decided, but it wasn\'t.', $class));
+    }
+
+    /**
+     * Assert $class was never decided (on a state matching $callback, if given). Faked clients only.
+     *
+     * @param  class-string  $class
+     * @param  (callable(mixed $state, ?string $model): bool)|null  $callback
+     */
+    public function assertNotDecided(string $class, ?callable $callback = null): void
+    {
+        $actual = count($this->decisions($class, $callback));
+        self::assert($actual === 0, sprintf('Expected %s not to be decided, but it was decided %d time(s).', $class, $actual));
+    }
+
+    /**
+     * Assert $class was decided exactly $count times. Faked clients only.
+     *
+     * @param  class-string  $class
+     */
+    public function assertDecidedCount(string $class, int $count): void
+    {
+        $actual = count($this->decisions($class));
+        self::assert($actual === $count, sprintf('Expected %s to be decided %d time(s), but it was decided %d time(s).', $class, $count, $actual));
     }
 
     public function assertPredictedCount(int $count): void
@@ -544,11 +604,36 @@ final class Laya
         };
     }
 
+    /**
+     * The fake's recorded predictions (matching $callback, if given).
+     *
+     * @param  (callable(mixed $state, array<array-key, mixed> $questions, ?string $model): bool)|null  $callback
+     * @return array<array-key, mixed>
+     */
+    private function predictions(?callable $callback): array
+    {
+        return array_filter($this->fakeClient()->requests, fn (array $r) => $callback === null || $callback($r['state'], $r['questions'], $r['model']));
+    }
+
+    /**
+     * The fake's recorded predictions of $class (on a state matching $callback, if given).
+     *
+     * @param  class-string  $class
+     * @param  (callable(mixed $state, ?string $model): bool)|null  $callback
+     * @return array<array-key, mixed>
+     */
+    private function decisions(string $class, ?callable $callback = null): array
+    {
+        $questions = json_decode(json_encode(self::wire(DecisionMapper::questions($class)), JSON_THROW_ON_ERROR), true);
+
+        return $this->predictions(fn (mixed $state, array $asked, ?string $model) => $asked === $questions && ($callback === null || $callback($state, $model)));
+    }
+
     private function fakeClient(): FakeHttpClient
     {
         return $this->http instanceof FakeHttpClient
             ? $this->http
-            : throw new \LogicException('Assertions are only available on a client created with Laya::fake().');
+            : throw new \LogicException('Only available on a client created with Laya::fake().');
     }
 
     private static function assert(bool $condition, string $message): void

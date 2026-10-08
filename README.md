@@ -589,6 +589,31 @@ A `#[Scale]` parameter takes a case, which the fake answers with that case's lev
 
 An `#[Of]` parameter takes the cases (or their values) that apply, and the fake answers each case's question with yes or no: `Laya::fake(['topics' => [Topic::Billing, 'account']])`.
 
+For code that treats states differently, give some states other answers with `when()`. Rules are checked in the order you add them, the first match wins, and its answers are merged over the defaults you passed to `fake()`:
+
+```php
+$laya = Laya::fake(['department' => 'other', 'churn' => false])
+    ->when(fn ($state) => str_contains($state, 'refund'), ['department' => 'billing', 'churn' => true])
+    ->when(fn ($state) => str_contains($state, 'outage'), new Triage(Department::Technical, urgency: 2, churn: false));
+```
+
+Or answer in order with `sequence()`. States that no `when()` rule matches take the next answer, and once all are used the fake throws:
+
+```php
+$laya = Laya::fake()->sequence(
+    ['department' => 'billing'],
+    ['department' => 'technical'],
+);
+```
+
+Both take an array or a decision instance, and match each state of a batch on its own. To check what didn't happen, or how often something did:
+
+```php
+$laya->assertNotPredicted(fn ($state) => str_contains($state, 'secret'));
+$laya->assertNotDecided(Triage::class);
+$laya->assertDecidedCount(Triage::class, 2);
+```
+
 With `minConfidence`, the fake gates its answers the way laya-serve does, so `abstention`, `abstentionThreshold` and `lowConfidence` follow from the answers you register.
 
 The fake reports the model you pin as `routedModel`. Without one it reports `'multilingual'`, matching laya-serve's default for text whose language it can't identify.

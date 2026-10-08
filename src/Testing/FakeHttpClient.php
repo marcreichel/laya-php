@@ -16,14 +16,46 @@ use Psr\Http\Message\ResponseInterface;
  * responses from registered answers, so the real request/response path still runs.
  *
  * @internal
+ *
+ * @phpstan-type Answers array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null>
  */
 final class FakeHttpClient implements ClientInterface
 {
     /** @var list<array{state: mixed, questions: array<array-key, mixed>, model: ?string}> */
     public private(set) array $requests = [];
 
-    /** @param array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null> $answers */
-    public function __construct(private readonly array $answers) {}
+    /** @var Answers */
+    private readonly array $answers;
+
+    /** @var list<array{\Closure(mixed): bool, Answers}> */
+    private array $rules = [];
+
+    /** @var list<Answers>|null null until sequence() is called */
+    private ?array $sequence = null;
+
+    /** @param array<string, mixed>|object $answers */
+    public function __construct(array|object $answers)
+    {
+        $this->answers = self::answers($answers);
+    }
+
+    /**
+     * @param  callable(mixed $state): bool  $matches
+     * @param  array<string, mixed>|object  $answers
+     */
+    public function when(callable $matches, array|object $answers): void
+    {
+        $this->rules[] = [$matches(...), self::answers($answers) + $this->answers];
+    }
+
+    /** @param array<string, mixed>|object $answers */
+    public function sequence(array|object ...$answers): void
+    {
+        $this->sequence ??= [];
+        foreach ($answers as $entry) {
+            $this->sequence[] = self::answers($entry) + $this->answers;
+        }
+    }
 
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
@@ -53,12 +85,13 @@ final class FakeHttpClient implements ClientInterface
     private function predict(mixed $state, array $questions, ?string $model, mixed $minConfidence): array
     {
         $this->requests[] = ['state' => $state, 'questions' => $questions, 'model' => $model];
+        $registered = $this->answersFor($state);
 
         $answers = [];
         foreach ($questions as $id => $question) {
             // predict() only sends string ids; the cast is for static analysis.
             $id = (string) $id; // @pest-mutate-ignore: RemoveStringCast
-            $answer = $this->answer($id, self::array($question), $this->registered($id));
+            $answer = $this->answer($id, self::array($question), self::registered($registered, $id));
             $answers[$id] = $minConfidence === null ? $answer : self::gate($answer, $minConfidence);
         }
 
@@ -71,20 +104,44 @@ final class FakeHttpClient implements ClientInterface
     }
 
     /**
+     * The answers for $state: the first matching when() rule's, else the next sequence() entry's, over the defaults.
+     *
+     * @return Answers
+     */
+    private function answersFor(mixed $state): array
+    {
+        foreach ($this->rules as [$matches, $answers]) {
+            if ($matches($state)) {
+                return $answers;
+            }
+        }
+
+        if ($this->sequence === null) {
+            return $this->answers;
+        }
+
+        return $this->sequence !== []
+            ? array_shift($this->sequence)
+            : throw new \LogicException('Laya::fake()->sequence() ran out: every answer it was given has been used.');
+    }
+
+    /**
      * The answer registered for $id. A decision class's "topics.billing" also takes a list of cases
      * registered as "topics": yes when it holds billing, unsure when it is null.
+     *
+     * @param  Answers  $answers
      */
-    private function registered(string $id): string|int|float|bool|\BackedEnum|null
+    private static function registered(array $answers, string $id): string|int|float|bool|\BackedEnum|null
     {
-        if (array_key_exists($id, $this->answers) && ! is_array($this->answers[$id])) {
-            return $this->answers[$id];
+        if (array_key_exists($id, $answers) && ! is_array($answers[$id])) {
+            return $answers[$id];
         }
 
         /** @var array{string, ?string} $parts */
         $parts = explode('.', $id, 2) + [1 => null];
         [$parameter, $case] = $parts;
-        if ($case !== null && array_key_exists($parameter, $this->answers)) {
-            $cases = $this->answers[$parameter];
+        if ($case !== null && array_key_exists($parameter, $answers)) {
+            $cases = $answers[$parameter];
             if ($cases === null) {
                 return null;
             }
@@ -200,6 +257,18 @@ final class FakeHttpClient implements ClientInterface
                 + ['legend' => $criteria, 'probabilities' => array_fill(0, count($criteria), 1 / count($criteria))],
             default => ['type' => 'noul', 'noul' => 0.5] + $none,
         };
+    }
+
+    /**
+     * A decision instance's properties, or the array as is.
+     *
+     * @param  array<string, mixed>|object  $answers
+     * @return Answers
+     */
+    private static function answers(array|object $answers): array
+    {
+        /** @var Answers */
+        return is_object($answers) ? get_object_vars($answers) : $answers;
     }
 
     /** @return array<mixed> */

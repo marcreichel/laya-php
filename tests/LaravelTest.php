@@ -55,6 +55,17 @@ it('swaps the container binding for the fake', function () {
     $fake->assertPredictedCount(1);
 });
 
+it('keeps the swapped fake when rules and sequences are chained on', function () {
+    $fake = Laya::fake(['churn' => true])->when(fn ($state) => $state === 'Stay.', ['churn' => false])->sequence(['churn' => 0.4]);
+
+    $first = app(Laya::class)->predict('Cancel my plan.', ['churn' => Question::yesNo('Threatens to cancel?')]);
+    $stay = app(Laya::class)->predict('Stay.', ['churn' => Question::yesNo('Threatens to cancel?')]);
+
+    expect(app(Laya::class))->toBe($fake)
+        ->and($first->yesNo('churn')->probability)->toBe(0.4)
+        ->and($stay->yesNo('churn')->no())->toBeTrue();
+});
+
 it('publishes the config file under the laya-config tag', function () {
     $paths = ServiceProvider::pathsToPublish(LayaServiceProvider::class, 'laya-config');
 
