@@ -12,6 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.4', '8.5']
+        dependencies: ['highest']
+        include:
+          - php: '8.4'
+            dependencies: 'lowest'
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
@@ -20,8 +24,15 @@ jobs:
           coverage: pcov
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress
+        if: matrix.dependencies == 'highest'
+      - run: composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
+        if: matrix.dependencies == 'lowest'
       - run: vendor/bin/pint --test
+        if: matrix.dependencies == 'highest'
       - run: vendor/bin/phpstan analyse --no-progress
       - run: vendor/bin/pest --coverage --min=100
+        if: matrix.dependencies == 'highest'
+      - run: vendor/bin/pest
+        if: matrix.dependencies == 'lowest'
       - run: vendor/bin/pest --mutate --everything --parallel --min=100
-        if: matrix.php == '8.4'
+        if: matrix.php == '8.4' && matrix.dependencies == 'highest'
