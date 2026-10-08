@@ -11,6 +11,8 @@ use App\Decisions\Codes;
 use App\Decisions\Department;
 use App\Decisions\Tagged;
 use App\Decisions\Triage;
+use App\Decisions\Urgency;
+use App\Decisions\Urgent;
 use Illuminate\Support\Facades\Artisan;
 use MarcReichel\Laya\Laravel\LayaServiceProvider;
 use MarcReichel\Laya\Laravel\TryCommand;
@@ -189,6 +191,13 @@ it('shows numeric labels', function () {
         ->and(Artisan::output())->toContain("  → Code::One (answer confidence 1.00)\n    1  ████████████████████  1.00\n    0  ░░░░░░░░░░░░░░░░░░░░  0.00\n");
 });
 
+it('shows a #[Scale] enum as a score with its case', function () {
+    Laya::fake(['urgency' => Urgency::High]);
+
+    expect(Artisan::call('laya:try', ['class' => Urgent::class, 'state' => 'x']))->toBe(0)
+        ->and(Artisan::output())->toContain("urgency: How urgent is this?\n  → Urgency::High (answer confidence 1.00, score 1.00)\n    1: high      ████████████████████  1.00\n    0: can wait  ░░░░░░░░░░░░░░░░░░░░  0.00\n");
+});
+
 it('keeps numeric labels an object, and whole numbers floats, in JSON', function () {
     Laya::fake(['code' => Code::Zero]);
 
@@ -280,7 +289,7 @@ it('fails clearly on bad input', function (array $parameters, string $message) {
     $fake->assertNothingPredicted();
 })->with([
     'unknown class' => [['class' => 'Decisions\Missing'], 'Class "Decisions\Missing" not found, neither as given nor under App\.'],
-    'invalid decision class' => [['class' => Broken::class], 'App\Decisions\Broken::$name has type string; laya answers from a fixed option set, so use a backed enum (choice), bool (yes/no), int with #[Levels] (score) or array with #[Of] (yes/no per enum case).'],
+    'invalid decision class' => [['class' => Broken::class], 'App\Decisions\Broken::$name has type string; laya answers from a fixed option set, so use a backed enum (choice, or score with #[Scale]), bool (yes/no), int with #[Levels] (score) or array with #[Of] (yes/no per enum case).'],
     'unreadable file' => [['class' => 'Decisions\Triage', 'state' => null, '--file' => '/does/not/exist'], 'Cannot read "/does/not/exist".'],
     'a directory' => [['class' => 'Decisions\Triage', 'state' => null, '--file' => __DIR__], sprintf('Cannot read "%s".', __DIR__)],
     'blank text' => [['class' => 'Decisions\Triage', 'state' => " \n"], 'No text to classify. Pass it as an argument, with --file, or on STDIN.'],

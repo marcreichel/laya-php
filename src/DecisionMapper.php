@@ -12,13 +12,14 @@ use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
 use MarcReichel\Laya\Attributes\Of;
+use MarcReichel\Laya\Attributes\Scale;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Exceptions\ServerException;
 
 /**
  * Turns a decision class's constructor into questions, and a Result back into an instance.
  *
- * Mapping: backed enum => choice, bool => yes/no, int + #[Levels] => score,
+ * Mapping: backed enum => choice, #[Scale] backed enum => score, bool => yes/no, int + #[Levels] => score,
  * array + #[Of(Enum::class)] => one yes/no per case, with ids such as "topics.billing".
  * A nullable parameter with #[Ask(minConfidence: ...)] is null when laya is unsure.
  *
@@ -86,7 +87,8 @@ final class DecisionMapper
                 continue;
             }
             $subject = $class.'::$'.$name;
-            $answer = match ($type) {
+            $scale = self::isScale($type);
+            $answer = match ($scale ? 'int' : $type) {
                 'bool' => self::answer($subject, $name, $result, $result->yesNo(...), 'yes/no'),
                 'int' => self::answer($subject, $name, $result, $result->score(...), 'score'),
                 default => self::answer($subject, $name, $result, $result->choice(...), 'choice'),
@@ -99,7 +101,7 @@ final class DecisionMapper
             if ($answer instanceof YesNoAnswer) {
                 $arguments[$name] = $answer->yes($ask->threshold);
             } elseif ($answer instanceof ScoreAnswer) {
-                $arguments[$name] = $answer->level();
+                $arguments[$name] = $scale ? self::scaleCase($subject, $type, $answer->level()) : $answer->level();
             } else {
                 $arguments[$name] = self::enumCase($subject, $type, $answer->choice);
             }
@@ -139,6 +141,23 @@ final class DecisionMapper
             throw new InvalidQuestionException(sprintf('%s::$%s is neither a bool nor an array of enum cases, so #[Ask] can\'t take threshold.', $class, $parameter->getName()));
         }
 
+        if (self::isScale($type)) {
+            if (self::attribute($parameter, Levels::class) !== null) {
+                throw new InvalidQuestionException(sprintf('%s::$%s is a #[Scale] enum, so its cases are the levels; drop #[Levels].', $class, $parameter->getName()));
+            }
+            /** @var class-string<\BackedEnum> $type */
+            $levels = [];
+            foreach (new \ReflectionEnum($type)->getCases() as $case) {
+                /** @var \ReflectionEnumBackedCase $case */
+                $levels[] = self::description($case) ?? (string) $case->getBackingValue();
+            }
+            if ($levels === []) {
+                throw new InvalidQuestionException(sprintf('%s::$%s is a #[Scale] enum without cases, so it has no levels.', $class, $parameter->getName()));
+            }
+
+            return Question::score($ask->instructions, $levels);
+        }
+
         if ($type === 'int') {
             $levels = self::attribute($parameter, Levels::class)
                 ?? throw new InvalidQuestionException(sprintf('%s::$%s is an int, so it needs #[Levels(...)] to become a score question.', $class, $parameter->getName()));
@@ -158,7 +177,7 @@ final class DecisionMapper
         }
 
         throw new InvalidQuestionException(sprintf(
-            '%s::$%s has type %s; laya answers from a fixed option set, so use a backed enum (choice), bool (yes/no), int with #[Levels] (score) or array with #[Of] (yes/no per enum case).',
+            '%s::$%s has type %s; laya answers from a fixed option set, so use a backed enum (choice, or score with #[Scale]), bool (yes/no), int with #[Levels] (score) or array with #[Of] (yes/no per enum case).',
             $class, $parameter->getName(), $type,
         ));
     }
@@ -298,6 +317,19 @@ final class DecisionMapper
         } catch (\ValueError $e) {
             throw new ServerException(sprintf('The laya-serve response answers %s with "%s", which isn\'t a %s case.', $subject, $choice, new \ReflectionClass($enum)->getShortName()), 200, $e);
         }
+    }
+
+    /** Whether $type is a backed enum marked #[Scale]. Public for the fake, which answers its cases with their level. */
+    public static function isScale(string $type): bool
+    {
+        return is_subclass_of($type, \BackedEnum::class) && new \ReflectionClass($type)->getAttributes(Scale::class) !== [];
+    }
+
+    private static function scaleCase(string $subject, string $enum, int $level): \BackedEnum
+    {
+        /** @var class-string<\BackedEnum> $enum */
+        return $enum::cases()[$level]
+            ?? throw new ServerException(sprintf('The laya-serve response answers %s with level %d, which isn\'t a %s case.', $subject, $level, new \ReflectionClass($enum)->getShortName()), 200);
     }
 
     /**

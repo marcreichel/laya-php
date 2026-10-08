@@ -270,9 +270,43 @@ $triage = $laya->decide($ticketText, Triage::class); // Triage
 | backed enum | choice (case values are the options; `#[Describe]` adds descriptions) | the most likely case |
 | `bool` | yes/no | `true` when P(yes) ≥ 0.5 |
 | `int` with `#[Levels(...)]` | score | the most likely level index |
+| backed enum marked `#[Scale]` | score (cases are the levels, lowest first; `#[Describe]` text or the value) | the case at the most likely level |
 | `array` with `#[Of(Enum::class)]` | one yes/no per case of a backed enum | the cases with P(yes) ≥ 0.5, in declaration order |
 
 Every parameter needs `#[Ask]`. Any other type throws an `InvalidQuestionException` that names the parameter.
+
+### Ordered levels as an enum
+
+A bare level index gives you `$triage->urgency === 2`. To get a case instead, mark the enum with `#[Scale]`. Its cases become the levels of a score question in declaration order, lowest first, whatever their backing values:
+
+```php
+use MarcReichel\Laya\Attributes\Scale;
+
+#[Scale]
+enum Urgency: int
+{
+    #[Describe('can wait a week or more')]
+    case NotUrgent = 0;
+
+    #[Describe('should be handled in the next day or two')]
+    case Soon = 1;
+
+    #[Describe('blocks the customer right now')]
+    case Blocking = 2;
+}
+
+final readonly class Triage
+{
+    public function __construct(
+        #[Ask('How urgent is this?')]
+        public Urgency $urgency,
+    ) {}
+}
+
+$laya->decide($ticketText, Triage::class)->urgency; // Urgency::Blocking
+```
+
+The enum defines the levels, so `#[Levels]` on such a parameter throws. A backed enum without `#[Scale]` stays a choice question.
 
 ### Multi-label decisions
 
@@ -550,6 +584,8 @@ $laya = Laya::fake(new Triage(department: null, churn: true));
 $laya->assertDecided(Triage::class);
 $laya->assertDecided(Triage::class, fn ($state, ?string $model) => str_contains($state, 'refund'));
 ```
+
+A `#[Scale]` parameter takes a case, which the fake answers with that case's level: `Laya::fake(['urgency' => Urgency::Blocking])`. A plain int is a level index, as for any score question.
 
 An `#[Of]` parameter takes the cases (or their values) that apply, and the fake answers each case's question with yes or no: `Laya::fake(['topics' => [Topic::Billing, 'account']])`.
 
