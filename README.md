@@ -577,6 +577,10 @@ curl -fsSL https://api.typesafe.ai/openapi.json -o openapi.json
 LAYA_OPENAPI=openapi.json composer test:contract   # requests and responses against TypeSafe's spec
 ```
 
+## Further reading
+
+- [laya-php: self-hosted text classification](https://laravel-news.com/laya-php-self-hosted-classification) on Laravel News
+
 ## License
 
 Apache-2.0
