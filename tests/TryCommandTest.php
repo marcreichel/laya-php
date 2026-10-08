@@ -7,6 +7,7 @@ use App\Decisions\Areas;
 use App\Decisions\Broken;
 use App\Decisions\Code;
 use App\Decisions\Coded;
+use App\Decisions\Codes;
 use App\Decisions\Department;
 use App\Decisions\Tagged;
 use App\Decisions\Triage;
@@ -226,6 +227,14 @@ it('shows whether each #[Of] case is listed', function () {
             Routed to english, 0 input tokens
 
             TXT);
+});
+
+it('shows int-backed #[Of] cases', function () {
+    Laya::fake(['codes' => [Code::One]]);
+
+    Artisan::call('laya:try', ['class' => Codes::class, 'state' => 'x']);
+
+    expect(Artisan::output())->toContain("codes.0: Is the code 0?\n  → false")->toContain("codes.1: Is the code 1?\n  → true");
 });
 
 it('shows unsure #[Of] cases as null, in JSON too', function () {

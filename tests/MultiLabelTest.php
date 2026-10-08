@@ -8,6 +8,7 @@ use MarcReichel\Laya\Attributes\Of;
 use MarcReichel\Laya\DecisionMapper;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Laya;
+use MarcReichel\Laya\Question;
 use PHPUnit\Framework\AssertionFailedError;
 
 enum Topic: string
@@ -205,6 +206,10 @@ it('still fails loudly on unregistered case questions', function (array $answers
     'a scalar for the parameter' => [['topics' => true, 'churn' => true]],
 ]);
 
+it('does not answer a plain question from a list', function () {
+    expect(fn () => Laya::fake(['churn' => [true]])->predict('x', ['churn' => Question::yesNo('Cancel?')]))->toThrow(LogicException::class, 'no answer for question "churn"');
+});
+
 it('asserts a decision class with #[Of] parameters was decided', function () {
     $laya = Laya::fake(new Tagging([Topic::Billing], false));
     $laya->decide('x', Tagging::class);
@@ -217,7 +222,7 @@ it('rejects #[Of] parameters it cannot map', function (object $dto, string $mess
 })->with([
     'array without #[Of]' => [new class([])
     {
-        public function __construct(#[Ask('Mentions {case}?')] public array $topics) {}
+        public function __construct(#[Ask('Mentions a topic?')] public array $topics) {}
     }, '::$topics is an array, so it needs #[Of(SomeEnum::class)]'],
     '#[Of] a class' => [new class([])
     {

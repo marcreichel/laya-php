@@ -69,3 +69,9 @@ final readonly class Areas
         #[Ask('Does the user threaten to cancel?')] public bool $churn,
     ) {}
 }
+
+final readonly class Codes
+{
+    /** @param list<Code> $codes */
+    public function __construct(#[Ask('Is the code {case}?'), Of(Code::class)] public array $codes) {}
+}

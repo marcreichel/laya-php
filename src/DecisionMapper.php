@@ -21,8 +21,8 @@ use MarcReichel\Laya\Exceptions\InvalidQuestionException;
  */
 final class DecisionMapper
 {
-    /** laya-serve refuses requests with more questions. */
-    private const int MAX_QUESTIONS = 64;
+    /** laya-serve refuses requests with more questions. Pest can't cover a constant; the 64/65-question tests pin it. */
+    private const int MAX_QUESTIONS = 64; // @pest-mutate-ignore
 
     /**
      * @param  class-string  $class
@@ -160,12 +160,13 @@ final class DecisionMapper
         $ask = self::ask($class, $parameter);
         self::assertNullable($class, $parameter, $ask, 'array');
         self::assertNoYesNo($class, $parameter, $ask);
+        $enum = self::of($class, $parameter);
         if (! str_contains($ask->instructions, '{case}')) {
             throw new InvalidQuestionException(sprintf('%s::$%s asks about each enum case, so its #[Ask] instructions need a {case} placeholder.', $class, $parameter->getName()));
         }
 
         $questions = [];
-        foreach (new \ReflectionEnum(self::of($class, $parameter))->getCases() as $case) {
+        foreach (new \ReflectionEnum($enum)->getCases() as $case) {
             /** @var \ReflectionEnumBackedCase $case */
             $value = $case->getBackingValue();
             $instructions = str_replace('{case}', self::description($case) ?? (string) $value, $ask->instructions);

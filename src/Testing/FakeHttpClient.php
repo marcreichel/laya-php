@@ -76,16 +76,16 @@ final class FakeHttpClient implements ClientInterface
             return $this->answers[$id];
         }
 
-        $parameter = strstr($id, '.', true);
-        if ($parameter !== false && array_key_exists($parameter, $this->answers)) {
+        /** @var array{string, ?string} $parts */
+        $parts = explode('.', $id, 2) + [1 => null];
+        [$parameter, $case] = $parts;
+        if ($case !== null && array_key_exists($parameter, $this->answers)) {
             $cases = $this->answers[$parameter];
             if ($cases === null) {
                 return null;
             }
             if (is_array($cases)) {
-                $values = array_map(fn (string|int|\BackedEnum $c) => (string) ($c instanceof \BackedEnum ? $c->value : $c), $cases);
-
-                return in_array(substr($id, strlen($parameter) + 1), $values, true);
+                return in_array($case, array_map(fn (string|int|\BackedEnum $c) => (string) ($c instanceof \BackedEnum ? $c->value : $c), $cases), true);
             }
         }
 
