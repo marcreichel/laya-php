@@ -295,18 +295,19 @@ it('reads health, dropping what is not laya-shaped', function () {
 });
 
 it('caches predictions by state, questions and model', function () {
+    // Untyped parameters, so the stub implements every psr/simple-cache major.
     $cache = new class implements CacheInterface
     {
         public array $items = [];
 
         public array $ttls = [];
 
-        public function get(string $key, mixed $default = null): mixed
+        public function get($key, $default = null): mixed
         {
             return $this->items[$key] ?? $default;
         }
 
-        public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
+        public function set($key, $value, $ttl = null): bool
         {
             $this->items[$key] = $value;
             $this->ttls[$key] = $ttl;
@@ -314,7 +315,7 @@ it('caches predictions by state, questions and model', function () {
             return true;
         }
 
-        public function delete(string $key): bool
+        public function delete($key): bool
         {
             return true;
         }
@@ -324,22 +325,22 @@ it('caches predictions by state, questions and model', function () {
             return true;
         }
 
-        public function getMultiple(iterable $keys, mixed $default = null): iterable
+        public function getMultiple($keys, $default = null): iterable
         {
             return [];
         }
 
-        public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
+        public function setMultiple($values, $ttl = null): bool
         {
             return true;
         }
 
-        public function deleteMultiple(iterable $keys): bool
+        public function deleteMultiple($keys): bool
         {
             return true;
         }
 
-        public function has(string $key): bool
+        public function has($key): bool
         {
             return isset($this->items[$key]);
         }
