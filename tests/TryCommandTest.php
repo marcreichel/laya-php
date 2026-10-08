@@ -224,7 +224,7 @@ it('shows whether each #[Of] case is listed', function () {
                 no   ████████████████████  1.00
                 yes  ░░░░░░░░░░░░░░░░░░░░  0.00
 
-            Routed to english, 0 input tokens
+            Routed to multilingual, 0 input tokens
 
             TXT);
 });
