@@ -85,7 +85,8 @@ final class Laya
      *
      * Choice answers take a label (or backed enum case), score answers a level index,
      * yes/no answers a bool or a probability, and null means laya is unsure (zero confidence).
-     * An unregistered question throws.
+     * An #[Of] parameter of a decision class takes the list of cases (or values) that apply,
+     * and fakes its per-case questions from it. An unregistered question throws.
      *
      * Or pass an instance of a decision class, and its properties become the answers:
      *
@@ -96,12 +97,12 @@ final class Laya
      * The fake dispatches PredictionMade like a real Laya, to $events (by default, the dispatcher of the
      * container's Laya, so Event::fake() and listeners see them). Its predictions are never cached.
      *
-     * @param  array<string, string|int|float|bool|\BackedEnum|null>|object  $answers
+     * @param  array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null>|object  $answers
      * @param  bool|null  $includeState  null takes the container's setting, or false
      */
     public static function fake(array|object $answers = [], ?EventDispatcherInterface $events = null, ?bool $includeState = null): self
     {
-        /** @var array<string, string|int|float|bool|\BackedEnum|null> $answers */
+        /** @var array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null> $answers */
         $answers = is_object($answers) ? get_object_vars($answers) : $answers;
         $bound = class_exists(Container::class) && Container::getInstance()->bound(self::class);
         /** @var self|null $current */

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Decisions\Area;
+use App\Decisions\Areas;
 use App\Decisions\Broken;
 use App\Decisions\Code;
 use App\Decisions\Coded;
@@ -201,6 +203,40 @@ it('keeps numeric labels an object, and whole numbers floats, in JSON', function
         JSON);
 });
 
+it('shows whether each #[Of] case is listed', function () {
+    Laya::fake(['areas' => [Area::Docs], 'churn' => false]);
+
+    expect(Artisan::call('laya:try', ['class' => Areas::class, 'state' => 'x']))->toBe(0)
+        ->and(Artisan::output())->toBe(<<<'TXT'
+            areas.billing: Is this about invoices, refunds?
+              → false (answer confidence 1.00)
+                no   ████████████████████  1.00
+                yes  ░░░░░░░░░░░░░░░░░░░░  0.00
+
+            areas.docs.api: Is this about docs.api?
+              → true (answer confidence 1.00)
+                yes  ████████████████████  1.00
+                no   ░░░░░░░░░░░░░░░░░░░░  0.00
+
+            churn: Does the user threaten to cancel?
+              → false (answer confidence 1.00)
+                no   ████████████████████  1.00
+                yes  ░░░░░░░░░░░░░░░░░░░░  0.00
+
+            Routed to english, 0 input tokens
+
+            TXT);
+});
+
+it('shows unsure #[Of] cases as null, in JSON too', function () {
+    Laya::fake(['areas' => null, 'churn' => true]);
+
+    Artisan::call('laya:try', ['class' => Areas::class, 'state' => 'x', '--json' => true]);
+
+    expect(array_map(fn (array $p) => $p['value'], json_decode(Artisan::output(), true)['parameters']))
+        ->toBe(['areas.billing' => null, 'areas.docs.api' => null, 'churn' => true]);
+});
+
 it('reads the text from a file', function () {
     $fake = Laya::fake(['department' => 'billing', 'urgency' => 1, 'churn' => false]);
     $file = tempnam(sys_get_temp_dir(), 'laya');
@@ -235,7 +271,7 @@ it('fails clearly on bad input', function (array $parameters, string $message) {
     $fake->assertNothingPredicted();
 })->with([
     'unknown class' => [['class' => 'Decisions\Missing'], 'Class "Decisions\Missing" not found, neither as given nor under App\.'],
-    'invalid decision class' => [['class' => Broken::class], 'App\Decisions\Broken::$name has type string; laya answers from a fixed option set, so use a backed enum (choice), bool (yes/no) or int with #[Levels] (score).'],
+    'invalid decision class' => [['class' => Broken::class], 'App\Decisions\Broken::$name has type string; laya answers from a fixed option set, so use a backed enum (choice), bool (yes/no), int with #[Levels] (score) or array with #[Of] (yes/no per enum case).'],
     'unreadable file' => [['class' => 'Decisions\Triage', 'state' => null, '--file' => '/does/not/exist'], 'Cannot read "/does/not/exist".'],
     'a directory' => [['class' => 'Decisions\Triage', 'state' => null, '--file' => __DIR__], sprintf('Cannot read "%s".', __DIR__)],
     'blank text' => [['class' => 'Decisions\Triage', 'state' => " \n"], 'No text to classify. Pass it as an argument, with --file, or on STDIN.'],

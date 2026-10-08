@@ -21,8 +21,8 @@ final readonly class Ask
     /**
      * @param  string|null  $yes  bool only: what "yes" means
      * @param  string|null  $no  bool only: what "no" means
-     * @param  float  $threshold  bool only: the P(yes) from which the value is true
-     * @param  float|null  $minConfidence  below this answerConfidence the value is null; needs a nullable parameter.
+     * @param  float  $threshold  bool and #[Of] arrays only: the P(yes) from which the value is true, or the case is listed
+     * @param  float|null  $minConfidence  below this answerConfidence (of any case, for #[Of] arrays) the value is null; needs a nullable parameter.
      *                                     Without an answer_confidence from the server, answerConfidence is the answer's confidence
      */
     public function __construct(
