@@ -579,7 +579,7 @@ LAYA_OPENAPI=openapi.json composer test:contract   # requests and responses agai
 
 ## Further reading
 
-- [laya-php: self-hosted text classification](https://laravel-news.com/laya-php-self-hosted-classification) on Laravel News
+- [LayaPHP: Self-Hosted Text Classification for PHP and Laravel](https://laravel-news.com/laya-php-self-hosted-classification) on Laravel News
 
 ## License
 
