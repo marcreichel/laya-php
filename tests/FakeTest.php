@@ -33,6 +33,12 @@ it('passes a null model to assertions when laya routes', function () {
     expect(fn () => $laya->assertPredicted(fn ($state, $questions, $model) => $model === null))->not->toThrow(AssertionFailedError::class);
 });
 
+it('reports the multilingual checkpoint when no model is pinned', function () {
+    $result = Laya::fake(['churn' => true])->predict('Billed twice', ['churn' => Question::yesNo('Cancel?')]);
+
+    expect($result->routedModel)->toBe('multilingual');
+});
+
 it('fails loudly on unregistered questions and impossible answers', function () {
     expect(fn () => Laya::fake()->predict('x', ['churn' => Question::yesNo('Cancel?')]))->toThrow(LogicException::class, 'no answer for question "churn"')
         ->and(fn () => Laya::fake(['d' => 'sales'])->predict('x', ['d' => Question::choice('Dept?', ['billing'])]))->toThrow(LogicException::class, 'not one of its options')

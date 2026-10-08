@@ -38,7 +38,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to v0.3.29, commit [`e08843b`](https://github.com/NandhaKishorM/laya/commit/e08843b6255e7ef97aa408a67ca5e6b26920415e)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to v0.4.0, commit [`3cf26cb`](https://github.com/NandhaKishorM/laya/commit/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
@@ -159,7 +159,7 @@ $laya->predict(['subject' => $mail->subject, 'body' => $mail->body], $questions)
 
 ### Picking a checkpoint
 
-By default, laya's router picks a checkpoint by language. The request then carries `"model": "jev-latest"`, since TypeSafe's spec requires a model name: laya-serve routes for names it doesn't know, and sys1 reads it as the model it serves. To pin one:
+By default, laya's router picks a checkpoint by language: text identified as English goes to the `english` checkpoint, everything else to `multilingual`. Since Laya 0.4.0 that includes text whose language it can't identify, such as very short text, text without letters (`"12345 !!!"`) or a few Latin-script content words (`"Quero cancelar"`); before, those went to `english`. For mostly-English traffic, start laya-serve with `LAYA_DEFAULT_MODEL=english` to restore the old behaviour (upstream puts the break-even at about 62% English). The request carries `"model": "jev-latest"`, since TypeSafe's spec requires a model name: laya-serve routes for names it doesn't know, and sys1 reads it as the model it serves. To pin one:
 
 ```php
 use MarcReichel\Laya\Model;
@@ -523,6 +523,8 @@ $laya->assertDecided(Triage::class, fn ($state, ?string $model) => str_contains(
 ```
 
 An `#[Of]` parameter takes the cases (or their values) that apply, and the fake answers each case's question with yes or no: `Laya::fake(['topics' => [Topic::Billing, 'account']])`.
+
+The fake reports the model you pin as `routedModel`. Without one it reports `'multilingual'`, matching laya-serve's default for text whose language it can't identify.
 
 If code asks a question you didn't register, or gives an answer that isn't one of the question's options, the fake throws.
 

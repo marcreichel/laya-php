@@ -62,7 +62,7 @@ final class FakeHttpClient implements ClientInterface
             'model' => 'laya-fake',
             'answers' => $answers,
             'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
-            'routing' => ['model' => $model ?? 'english', 'reason' => 'fake'],
+            'routing' => ['model' => $model ?? 'multilingual', 'reason' => 'fake'],
         ];
     }
 
