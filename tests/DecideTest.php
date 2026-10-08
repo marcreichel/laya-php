@@ -5,6 +5,7 @@ declare(strict_types=1);
 use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
+use MarcReichel\Laya\DecisionMapper;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Laya;
@@ -49,8 +50,9 @@ it('asks the questions a decision class declares and hydrates it', function () {
       && $questions['churn']['type'] === 'noul');
 });
 
-it('explains what is wrong with an unsupported decision class', function (object $dto, string $message) {
-    expect(fn () => Laya::fake()->decide('x', $dto::class))->toThrow(InvalidQuestionException::class, $message);
+it('explains what is wrong with an unsupported decision class, on every call', function (object $dto, string $message) {
+    expect(fn () => Laya::fake()->decide('x', $dto::class))->toThrow(InvalidQuestionException::class, $message)
+        ->and(fn () => Laya::fake()->decide('x', $dto::class))->toThrow(InvalidQuestionException::class, $message);
 })->with([
     'missing #[Ask]' => [new class(true)
     {
@@ -81,6 +83,10 @@ final readonly class Coded
 {
     public function __construct(#[Ask('Which code?')] public Code $code) {}
 }
+
+it('reflects a decision class once per process', function () {
+    expect(DecisionMapper::questions(Triage::class))->toBe(DecisionMapper::questions(Triage::class));
+});
 
 it('maps a numeric choice onto a string-backed enum', function () {
     $coded = layaRespondingWith(200, ['answers' => ['code' => ['type' => 'choice', 'choice' => 2]]])->decide('x', Coded::class);
