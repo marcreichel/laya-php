@@ -140,7 +140,7 @@ final class TryCommand extends Command
 
     /**
      * @param  array<string, Question>  $questions
-     * @param  array<string, bool|int|\BackedEnum|null>  $values
+     * @param  array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>  $values
      */
     private function render(array $questions, Result $result, array $values): void
     {
@@ -152,7 +152,7 @@ final class TryCommand extends Command
             }
 
             $this->line(sprintf('<info>%s</info>: %s', $name, OutputFormatter::escape($question->instructions)));
-            $this->line(sprintf('  → <comment>%s</comment> (%s)', OutputFormatter::escape(self::display($values[$name])), $details));
+            $this->line(sprintf('  → <comment>%s</comment> (%s)', OutputFormatter::escape(self::display(self::value($values, $name))), $details));
 
             $this->bars(self::probabilities($answer));
             $this->newLine();
@@ -213,6 +213,28 @@ final class TryCommand extends Command
         return $probabilities;
     }
 
+    /**
+     * The value behind question $id. An #[Of] parameter's "topics.billing" reads whether its list holds billing.
+     *
+     * @param  array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>  $values
+     */
+    private static function value(array $values, string $id): bool|int|\BackedEnum|null
+    {
+        // Parameter names can't hold a dot, so a dotted id is an #[Of] parameter's case question.
+        if (! str_contains($id, '.')) {
+            /** @var bool|int|\BackedEnum|null $value */
+            $value = $values[$id];
+
+            return $value;
+        }
+
+        [$parameter, $case] = explode('.', $id, 2);
+        /** @var list<\BackedEnum>|null $cases */
+        $cases = $values[$parameter];
+
+        return $cases === null ? null : in_array($case, array_map(fn (\BackedEnum $c) => (string) $c->value, $cases), true);
+    }
+
     private static function display(bool|int|\BackedEnum|null $value): string
     {
         if ($value instanceof \BackedEnum) {
@@ -230,7 +252,7 @@ final class TryCommand extends Command
     /**
      * @param  class-string  $class
      * @param  array<string, Question>  $questions
-     * @param  array<string, bool|int|\BackedEnum|null>  $values
+     * @param  array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>  $values
      */
     private static function json(string $class, array $questions, Result $result, array $values): string
     {
@@ -240,7 +262,7 @@ final class TryCommand extends Command
             $parameters[$name] = [
                 'question' => $question->instructions,
                 'type' => $question->type->value,
-                'value' => $values[$name], // json_encode() writes an enum as its value
+                'value' => self::value($values, $name), // json_encode() writes an enum as its value
                 'answer_confidence' => $answer->answerConfidence,
                 // An object even for labels "0", "1", ..., which would otherwise encode as a list.
                 'probabilities' => (object) self::probabilities($answer),

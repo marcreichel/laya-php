@@ -21,7 +21,7 @@ final class FakeHttpClient implements ClientInterface
     /** @var list<array{state: mixed, questions: array<array-key, mixed>, model: ?string}> */
     public private(set) array $requests = [];
 
-    /** @param array<string, string|int|float|bool|\BackedEnum|null> $answers */
+    /** @param array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null> $answers */
     public function __construct(private readonly array $answers) {}
 
     public function sendRequest(RequestInterface $request): ResponseInterface
@@ -55,10 +55,7 @@ final class FakeHttpClient implements ClientInterface
         foreach ($questions as $id => $question) {
             // predict() only sends string ids; the cast is for static analysis.
             $id = (string) $id; // @pest-mutate-ignore: RemoveStringCast
-            if (! array_key_exists($id, $this->answers)) {
-                throw new \LogicException(sprintf('Laya::fake() has no answer for question "%s". Register one: Laya::fake([\'%s\' => ...]).', $id, $id));
-            }
-            $answers[$id] = $this->answer($id, self::array($question), $this->answers[$id]);
+            $answers[$id] = $this->answer($id, self::array($question), $this->registered($id));
         }
 
         return [
@@ -67,6 +64,32 @@ final class FakeHttpClient implements ClientInterface
             'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
             'routing' => ['model' => $model ?? 'english', 'reason' => 'fake'],
         ];
+    }
+
+    /**
+     * The answer registered for $id. A decision class's "topics.billing" also takes a list of cases
+     * registered as "topics": yes when it holds billing, unsure when it is null.
+     */
+    private function registered(string $id): string|int|float|bool|\BackedEnum|null
+    {
+        if (array_key_exists($id, $this->answers) && ! is_array($this->answers[$id])) {
+            return $this->answers[$id];
+        }
+
+        /** @var array{string, ?string} $parts */
+        $parts = explode('.', $id, 2) + [1 => null];
+        [$parameter, $case] = $parts;
+        if ($case !== null && array_key_exists($parameter, $this->answers)) {
+            $cases = $this->answers[$parameter];
+            if ($cases === null) {
+                return null;
+            }
+            if (is_array($cases)) {
+                return in_array($case, array_map(fn (string|int|\BackedEnum $c) => (string) ($c instanceof \BackedEnum ? $c->value : $c), $cases), true);
+            }
+        }
+
+        throw new \LogicException(sprintf('Laya::fake() has no answer for question "%s". Register one: Laya::fake([\'%s\' => ...]).', $id, $id));
     }
 
     /**

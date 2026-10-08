@@ -245,8 +245,41 @@ $triage = $laya->decide($ticketText, Triage::class); // Triage
 | backed enum | choice (case values are the options; `#[Describe]` adds descriptions) | the most likely case |
 | `bool` | yes/no | `true` when P(yes) ≥ 0.5 |
 | `int` with `#[Levels(...)]` | score | the most likely level index |
+| `array` with `#[Of(Enum::class)]` | one yes/no per case of a backed enum | the cases with P(yes) ≥ 0.5, in declaration order |
 
 Every parameter needs `#[Ask]`. Any other type throws an `InvalidQuestionException` that names the parameter.
+
+### Multi-label decisions
+
+When several options can apply at once, such as the topics a message mentions, declare an `array` with `#[Of]`. laya gets one yes/no question per enum case, with `{case}` in the instructions replaced by the case's `#[Describe]` text (or its value):
+
+```php
+use MarcReichel\Laya\Attributes\Of;
+
+enum Topic: string
+{
+    #[Describe('invoices, payments, refunds')]
+    case Billing = 'billing';
+
+    #[Describe('login, passwords, 2FA')]
+    case Account = 'account';
+
+    case Shipping = 'shipping';
+}
+
+final readonly class Tagging
+{
+    public function __construct(
+        /** @var list<Topic> */
+        #[Ask('Does this message mention {case}?', threshold: 0.3), Of(Topic::class)]
+        public array $topics,
+    ) {}
+}
+
+$laya->decide($text, Tagging::class)->topics; // [Topic::Billing, Topic::Account]
+```
+
+No case passing gives `[]`. The questions have ids such as `topics.billing`, which is how `laya:try` and `PredictionMade` show them. Each case is a question of its own, and laya-serve answers at most 64 questions per request, so a class with more (counting its other parameters) throws an `InvalidQuestionException`.
 
 `#[Ask]` takes a few options on top of the question:
 
@@ -273,9 +306,9 @@ if ($triage->department === null) {
 
 | Option | Applies to | Effect |
 |---|---|---|
-| `minConfidence` | any nullable parameter | `null` when `answerConfidence` is below it |
+| `minConfidence` | any nullable parameter | `null` when `answerConfidence` is below it (for `?array` with `#[Of]`: when any case's is) |
 | `yes`, `no` | `bool` | describe what yes and no mean |
-| `threshold` | `bool` | `true` when P(yes) ≥ threshold (default 0.5) |
+| `threshold` | `bool`, `array` with `#[Of]` | `true`, or the case is listed, when P(yes) ≥ threshold (default 0.5) |
 
 For the full probabilities, use `predict()`.
 
@@ -488,6 +521,8 @@ $laya = Laya::fake(new Triage(department: null, churn: true));
 $laya->assertDecided(Triage::class);
 $laya->assertDecided(Triage::class, fn ($state, ?string $model) => str_contains($state, 'refund'));
 ```
+
+An `#[Of]` parameter takes the cases (or their values) that apply, and the fake answers each case's question with yes or no: `Laya::fake(['topics' => [Topic::Billing, 'account']])`.
 
 If code asks a question you didn't register, or gives an answer that isn't one of the question's options, the fake throws.
 

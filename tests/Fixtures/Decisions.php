@@ -9,6 +9,7 @@ namespace App\Decisions;
 use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
+use MarcReichel\Laya\Attributes\Of;
 
 enum Department: string
 {
@@ -51,4 +52,26 @@ enum Code: int
 final readonly class Coded
 {
     public function __construct(#[Ask('Which code?')] public Code $code) {}
+}
+
+enum Area: string
+{
+    #[Describe('invoices, refunds')]
+    case Billing = 'billing';
+    case Docs = 'docs.api';
+}
+
+final readonly class Areas
+{
+    /** @param list<Area>|null $areas */
+    public function __construct(
+        #[Ask('Is this about {case}?', minConfidence: 0.5), Of(Area::class)] public ?array $areas,
+        #[Ask('Does the user threaten to cancel?')] public bool $churn,
+    ) {}
+}
+
+final readonly class Codes
+{
+    /** @param list<Code> $codes */
+    public function __construct(#[Ask('Is the code {case}?'), Of(Code::class)] public array $codes) {}
 }

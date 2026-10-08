@@ -135,7 +135,7 @@ it('rejects #[Ask] options that cannot apply', function (object $dto, string $me
     'yes on an enum' => [new class(Department::Billing)
     {
         public function __construct(#[Ask('Dept?', yes: 'x')] public Department $d) {}
-    }, 'is not a bool, so #[Ask] can\'t take yes, no or threshold'],
+    }, 'is not a bool, so #[Ask] can\'t take yes or no.'],
     'no on an int' => [new class(1)
     {
         public function __construct(#[Ask('Urgent?', no: 'x'), Levels('a')] public int $u) {}
@@ -143,7 +143,7 @@ it('rejects #[Ask] options that cannot apply', function (object $dto, string $me
     'threshold on an enum' => [new class(Department::Billing)
     {
         public function __construct(#[Ask('Dept?', threshold: 0.4)] public Department $d) {}
-    }, 'is not a bool'],
+    }, '::$d is neither a bool nor an array of enum cases, so #[Ask] can\'t take threshold.'],
 ]);
 
 it('fakes answers from a decision object, including unsure ones', function () {
