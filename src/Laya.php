@@ -7,6 +7,7 @@ namespace MarcReichel\Laya;
 use Http\Discovery\Psr17FactoryDiscovery;
 use Http\Discovery\Psr18ClientDiscovery;
 use Illuminate\Container\Container;
+use MarcReichel\Laya\Events\CacheFailed;
 use MarcReichel\Laya\Events\PredictionFailed;
 use MarcReichel\Laya\Events\PredictionMade;
 use MarcReichel\Laya\Exceptions\AuthenticationException;
@@ -60,9 +61,9 @@ final class Laya
 
     /**
      * @param  ClientInterface|null  $httpClient  any PSR-18 client; discovered when omitted
-     * @param  CacheInterface|null  $cache  caches predictions by state, questions and model; laya is deterministic
+     * @param  CacheInterface|null  $cache  caches predictions by state, questions and model; laya is deterministic. Best-effort: its exceptions never fail a prediction
      * @param  int|\DateInterval|null  $cacheTtl  null keeps entries as long as the cache does
-     * @param  EventDispatcherInterface|null  $events  receives a PredictionMade or PredictionFailed for every prediction
+     * @param  EventDispatcherInterface|null  $events  receives a PredictionMade or PredictionFailed for every prediction, and a CacheFailed when the cache fails
      * @param  bool  $includeState  put the state on the events; off by default, since states may be sensitive
      */
     public function __construct(
@@ -142,12 +143,11 @@ final class Laya
         self::assertMinConfidence($minConfidence);
         $json = self::json($this->body(['state' => $state], self::wire($questions), $model, $maxLen, $headMaxLen, $minConfidence));
         $key = self::cacheKey($json);
-        $cached = $this->cache?->get($key);
-        if (is_array($cached)) {
-            $result = Result::fromArray($cached);
-            $this->events?->dispatch($this->made($state, $questions, $model, $result, true, 0.0));
+        $cached = $this->cached($key);
+        if ($cached !== null) {
+            $this->events?->dispatch($this->made($state, $questions, $model, $cached, true, 0.0));
 
-            return $result;
+            return $cached;
         }
 
         $start = hrtime(true);
@@ -159,7 +159,7 @@ final class Laya
 
             throw $e;
         }
-        $this->cache?->set($key, $raw, $this->cacheTtl);
+        $this->remember($key, $raw);
         $this->events?->dispatch($this->made($state, $questions, $model, $result, false, self::since($start)));
 
         return $result;
@@ -193,11 +193,9 @@ final class Laya
         $misses = [];
         foreach ($states as $id => $state) {
             $key = self::cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen, $minConfidence)));
-            $cached = $this->cache?->get($key);
-            // Placeholders keep the input order for the answers filled in below.
-            $results[$id] = null;
-            if (is_array($cached)) {
-                $results[$id] = Result::fromArray($cached);
+            // Misses stay null, placeholders that keep the input order for the answers filled in below.
+            $results[$id] = $this->cached($key);
+            if ($results[$id] !== null) {
                 $this->events?->dispatch($this->made($state, $questions, $model, $results[$id], true, 0.0));
             } else {
                 $misses[$id] = $key;
@@ -220,7 +218,7 @@ final class Laya
             $duration = self::since($start);
             foreach (array_keys($chunk) as $i => $id) {
                 $results[$id] = $parsed[$i];
-                $this->cache?->set($chunk[$id], $answers[$i], $this->cacheTtl);
+                $this->remember($chunk[$id], $answers[$i]);
                 $this->events?->dispatch($this->made($states[$id], $questions, $model, $parsed[$i], false, $duration));
             }
         }
@@ -330,6 +328,51 @@ final class Laya
         }
 
         return array_map(fn (mixed $answer) => is_array($answer) ? $answer : [], $answers);
+    }
+
+    /**
+     * The cached result for $key, or null to ask laya-serve: the cache is an optimisation, so a read that
+     * throws, or an entry that isn't a laya response, is a miss.
+     */
+    private function cached(string $key): ?Result
+    {
+        try {
+            $cached = $this->cache?->get($key);
+
+            return is_array($cached) ? Result::fromArray($cached) : null;
+        } catch (\Exception $e) {
+            $this->cacheFailed('get', $key, $e);
+
+            return null;
+        }
+    }
+
+    /**
+     * Caches an answer laya-serve gave. A write that throws leaves it uncached, rather than losing it.
+     *
+     * @param  array<mixed>  $raw
+     */
+    private function remember(string $key, array $raw): void
+    {
+        try {
+            $this->cache?->set($key, $raw, $this->cacheTtl);
+        } catch (\Exception $e) {
+            $this->cacheFailed('set', $key, $e);
+        }
+    }
+
+    /**
+     * Dispatches a CacheFailed. A listener that throws mustn't fail the prediction the cache couldn't, so its exception is dropped.
+     *
+     * @param  'get'|'set'  $operation
+     */
+    private function cacheFailed(string $operation, string $key, \Exception $e): void
+    {
+        try {
+            $this->events?->dispatch(new CacheFailed($operation, $key, $e));
+        } catch (\Exception) {
+            // Only exceptions, as in failed().
+        }
     }
 
     /**

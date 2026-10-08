@@ -55,7 +55,7 @@ LAYA_URL=http://localhost:8000
 LAYA_API_KEY=
 LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
-LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed (see Events)
+LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed/CacheFailed (see Events)
 LAYA_EVENTS_INCLUDE_STATE=false
 ```
 
@@ -455,6 +455,8 @@ $laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400);
 
 The key doesn't include the checkpoint revision, so clear the cache (or set a TTL) when you upgrade `laya-serve`'s checkpoints.
 
+The cache is best-effort: it never fails a prediction. If reading it throws (say, Redis is unreachable), or an entry isn't a laya response, Laya asks `laya-serve` and overwrites the entry with the answer. If writing it throws, you get the result anyway, uncached; in a batch, every state still gets its result. Only exceptions are caught, so an `Error` still surfaces. With an event dispatcher, each failure dispatches a `CacheFailed` (see Events); without one, failures are silent.
+
 ## Events
 
 To monitor predictions (timings, cache hits, routing, failures), pass any PSR-14 event dispatcher:
@@ -467,8 +469,9 @@ $laya = new Laya('http://laya:8000', events: $psr14Dispatcher);
 |---|---|---|
 | `PredictionMade` | after each `predict()`, and after each state of a `predictMany()` (so also `decide()`/`decideMany()`) | `questionIds`, `model` (pinned, or `null`), `routedModel`, `truncated`, `cached`, `durationMs`, `inputTokens`, `result` |
 | `PredictionFailed` | when a request to laya-serve fails, right before the exception is thrown; once per failed batch request | `questionIds`, `model`, `exception`, `durationMs` |
+| `CacheFailed` | when a cache read throws or returns an entry that isn't a laya response, or a cache write throws; the prediction goes on (see Caching) | `operation` (`get` or `set`), `key`, `exception` |
 
-Both are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. A question or decision class that is malformed throws before any request, without an event. If a `PredictionFailed` listener throws, its exception is dropped, so you still get the laya error.
+All are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. A question or decision class that is malformed throws before any request, without an event. If a `PredictionFailed` listener throws, its exception is dropped, so you still get the laya error; the same goes for a `CacheFailed` listener, so you still get the result.
 
 The events leave the state out, since it may be sensitive. Pass `includeState: true` to get it as `$event->state` (for a failed batch, the states of that request, keyed as you passed them). Without a dispatcher, no events are built.
 
