@@ -224,7 +224,7 @@ $results[42]->choice('department');
 $triages = $laya->decideMany($tickets->pluck('body', 'id')->all(), Triage::class, maxLen: 4096);
 ```
 
-Cached states aren't sent again, and the rest go out in requests of at most 64 states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. `maxLen` and `headMaxLen` apply to every state in the batch and need laya-serve 0.3.23; older servers ignore them. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
+Cached states aren't sent again, identical states in one call are sent once and share the result, and the rest go out in requests of at most 64 distinct states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. `maxLen` and `headMaxLen` apply to every state in the batch and need laya-serve 0.3.23; older servers ignore them. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
 
 Both methods are experimental and may change in a minor release.
 
@@ -505,9 +505,9 @@ $laya = new Laya('http://laya:8000', events: $psr14Dispatcher);
 | `PredictionFailed` | when a request to laya-serve fails, right before the exception is thrown; once per failed batch request | `questionIds`, `model`, `exception`, `durationMs` |
 | `CacheFailed` | when a cache read throws or returns an entry that isn't a laya response, or a cache write throws; the prediction goes on (see Caching) | `operation` (`get` or `set`), `key`, `exception` |
 
-All are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. A question or decision class that is malformed throws before any request, without an event. If a `PredictionFailed` listener throws, its exception is dropped, so you still get the laya error; the same goes for a `CacheFailed` listener, so you still get the result.
+All are readonly classes in `MarcReichel\Laya\Events`. Cache hits have a `durationMs` of `0`, and the states of a batch share the duration of the request they were sent in. Identical states in a batch are sent once, but each still gets its own `PredictionMade`, with that request's duration and `cached` false. A question or decision class that is malformed throws before any request, without an event. If a `PredictionFailed` listener throws, its exception is dropped, so you still get the laya error; the same goes for a `CacheFailed` listener, so you still get the result.
 
-The events leave the state out, since it may be sensitive. Pass `includeState: true` to get it as `$event->state` (for a failed batch, the states of that request, keyed as you passed them). Without a dispatcher, no events are built.
+The events leave the state out, since it may be sensitive. Pass `includeState: true` to get it as `$event->state` (for a failed batch, every state of that request, identical ones included, keyed as you passed them). Without a dispatcher, no events are built.
 
 In Laravel, the service provider passes the app's event dispatcher, so listeners and `Event::fake()` work as usual:
 
@@ -606,7 +606,7 @@ $laya = Laya::fake()->sequence(
 );
 ```
 
-Both take an array or a decision instance, and match each state of a batch on its own. To check what didn't happen, or how often something did:
+Both take an array or a decision instance, and match each state of a batch on its own. Identical states in one batch are sent once, so they share an answer and are recorded once. To check what didn't happen, or how often something did:
 
 ```php
 $laya->assertNotPredicted(fn ($state) => str_contains($state, 'secret'));

@@ -19,7 +19,9 @@ final readonly class PredictionMade
      * @param  Model|null  $model  the pinned checkpoint; null when laya's router picked one
      * @param  string|null  $routedModel  the checkpoint that answered, e.g. "english"
      * @param  bool  $cached  answered from the cache, without a request
-     * @param  float  $durationMs  0 for cache hits; for batches, the duration of the request the state was sent in
+     * @param  float  $durationMs  0 for cache hits; for batches, the duration of the request the state was sent in.
+     *                             Identical states in a batch are sent once, and each copy gets an event with that
+     *                             request's duration and $cached false.
      * @param  mixed  $state  only when Laya was created with includeState: true, since states may be sensitive
      */
     public function __construct(

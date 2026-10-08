@@ -16,7 +16,7 @@ final readonly class PredictionFailed
     /**
      * @param  list<string>  $questionIds
      * @param  Model|null  $model  the pinned checkpoint; null when laya's router would have picked one
-     * @param  mixed  $state  only when Laya was created with includeState: true; for a batch, the states of the failed request, keyed as given
+     * @param  mixed  $state  only when Laya was created with includeState: true; for a batch, the states of the failed request, keyed as given, identical ones included
      */
     public function __construct(
         public array $questionIds,

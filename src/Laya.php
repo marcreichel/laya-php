@@ -200,8 +200,8 @@ final class Laya
      *     $results = $laya->predictMany($tickets->pluck('body', 'id')->all(), $questions);
      *     $results[42]->choice('department');
      *
-     * Results keep the keys of $states. Cached states aren't sent again, and the rest go out
-     * in requests of at most 64 states.
+     * Results keep the keys of $states. Cached states aren't sent again, identical ones are sent
+     * once and share the answer, and the rest go out in requests of at most 64 distinct states.
      *
      * @experimental needs laya-serve >= 0.3.22 (>= 0.3.23 for token budgets), and may change in a minor release
      *
@@ -231,24 +231,28 @@ final class Laya
             }
         }
 
-        foreach (array_chunk($misses, self::BATCH_SIZE, preserve_keys: true) as $chunk) {
-            $sent = array_intersect_key($states, $chunk);
+        // Identical states share a key, so each distinct one is sent once and its answer goes to every copy.
+        foreach (array_chunk(array_unique($misses), self::BATCH_SIZE, preserve_keys: true) as $chunk) {
+            // ponytail: scans all misses per chunk, O(n²/64); group the ids by chunk up front if batches reach tens of thousands
+            $copies = array_intersect($misses, $chunk);
             // The batch endpoint takes the same controls as a single prediction and applies them to every state.
-            $body = $this->body(['states' => array_values($sent)], $wire, $model, $maxLen, $headMaxLen, $minConfidence);
+            $body = $this->body(['states' => array_values(array_intersect_key($states, $chunk))], $wire, $model, $maxLen, $headMaxLen, $minConfidence);
             $start = hrtime(true);
             try {
-                $answers = $this->sendBatch($body, count($chunk));
+                $answers = array_combine($chunk, $this->sendBatch($body, count($chunk)));
                 $parsed = array_map(Result::fromArray(...), $answers);
             } catch (LayaException $e) {
-                $this->failed($e, $sent, $questions, $model, $start);
+                $this->failed($e, array_intersect_key($states, $copies), $questions, $model, $start);
 
                 throw $e;
             }
             $duration = self::since($start);
-            foreach (array_keys($chunk) as $i => $id) {
-                $results[$id] = $parsed[$i];
-                $this->remember($chunk[$id], $answers[$i]);
-                $this->events?->dispatch($this->made($states[$id], $questions, $model, $parsed[$i], false, $duration));
+            foreach ($answers as $key => $answer) {
+                $this->remember($key, $answer);
+            }
+            foreach ($copies as $id => $key) {
+                $results[$id] = $parsed[$key];
+                $this->events?->dispatch($this->made($states[$id], $questions, $model, $parsed[$key], false, $duration));
             }
         }
 

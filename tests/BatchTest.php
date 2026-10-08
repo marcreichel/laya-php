@@ -93,6 +93,41 @@ it('shares the cache with predict() and only sends the states it misses', functi
         ->and($sent)->toHaveCount(2);
 });
 
+it('sends identical states once and gives every key the result', function (?Repository $cache) {
+    $sent = [];
+    $laya = layaBatching($sent, $cache);
+    $results = $laya->predictMany(['a' => 'x', 'b' => 'y', 'c' => 'x', 'd' => 'y', 'e' => 'z'], questions());
+
+    expect($sent)->toHaveCount(1)
+        ->and(json_decode((string) $sent[0]->getBody(), true)['states'])->toBe(['x', 'y', 'z'])
+        ->and(array_keys($results))->toBe(['a', 'b', 'c', 'd', 'e'])
+        ->and(array_map(fn ($r) => $r->routedModel, $results))->toBe(['a' => 'x', 'b' => 'y', 'c' => 'x', 'd' => 'y', 'e' => 'z'])
+        ->and($results['c'])->toBe($results['a']);
+
+    if ($cache !== null) {
+        expect($laya->predictMany(['f' => 'z', 'g' => 'x'], questions())['g'])->toEqual($results['a'])
+            ->and($sent)->toHaveCount(1);
+    }
+})->with([
+    'without a cache' => [null],
+    'with a cache' => [fn () => new Repository(new ArrayStore)],
+]);
+
+it('chunks by distinct states', function (?Repository $cache) {
+    $sent = [];
+    $results = layaBatching($sent, $cache)->predictMany(array_map(fn ($i) => 'state '.($i % 70), range(0, 139)), questions());
+
+    expect(array_map(fn ($r) => json_decode((string) $r->getBody(), true)['states'], $sent))
+        ->toBe([array_map(fn ($i) => "state $i", range(0, 63)), array_map(fn ($i) => "state $i", range(64, 69))])
+        ->and(array_keys($results))->toBe(range(0, 139))
+        ->and($results[69]->routedModel)->toBe('state 69')
+        ->and($results[139]->routedModel)->toBe('state 69')
+        ->and($results[70]->routedModel)->toBe('state 0');
+})->with([
+    'without a cache' => [null],
+    'with a cache' => [fn () => new Repository(new ArrayStore)],
+]);
+
 it('says which laya-serve it needs when the batch endpoint is missing', function () {
     expect(fn () => layaRespondingWith(404, ['detail' => 'Not Found'])->predictMany(['x'], questions()))
         ->toThrow(fn (ServerException $e) => expect($e->getMessage())->toContain('0.3.22')
