@@ -169,13 +169,13 @@ final class FakeHttpClient implements ClientInterface
         /** @var string $type */
         $type = $answer['type'];
         $options = count($answer['probabilities']);
+        foreach ([2 => '2', 5 => '3-5', 10 => '6-10'] as $max => $size) {
+            if ($options <= $max) {
+                return $type.':'.$size;
+            }
+        }
 
-        return sprintf('%s:%s', $type, match (true) {
-            $options <= 2 => '2',
-            $options <= 5 => '3-5',
-            $options <= 10 => '6-10',
-            default => '11+',
-        });
+        return $type.':11+';
     }
 
     /**
