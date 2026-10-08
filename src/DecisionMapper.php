@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace MarcReichel\Laya;
 
+use MarcReichel\Laya\Answers\Answer;
+use MarcReichel\Laya\Answers\ChoiceAnswer;
+use MarcReichel\Laya\Answers\ScoreAnswer;
+use MarcReichel\Laya\Answers\YesNoAnswer;
 use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
 use MarcReichel\Laya\Attributes\Of;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
+use MarcReichel\Laya\Exceptions\ServerException;
 
 /**
  * Turns a decision class's constructor into questions, and a Result back into an instance.
@@ -80,16 +85,24 @@ final class DecisionMapper
 
                 continue;
             }
-            if ($ask->minConfidence !== null && $result->get($name)->answerConfidence < $ask->minConfidence) {
+            $subject = $class.'::$'.$name;
+            $answer = match ($type) {
+                'bool' => self::answer($subject, $name, $result, $result->yesNo(...), 'yes/no'),
+                'int' => self::answer($subject, $name, $result, $result->score(...), 'score'),
+                default => self::answer($subject, $name, $result, $result->choice(...), 'choice'),
+            };
+            if ($ask->minConfidence !== null && $answer->answerConfidence < $ask->minConfidence) {
                 $arguments[$name] = null;
 
                 continue;
             }
-            $arguments[$name] = match ($type) {
-                'bool' => $result->yesNo($name)->yes($ask->threshold),
-                'int' => $result->score($name)->level(),
-                default => self::enumCase($type, $result->choice($name)->choice),
-            };
+            if ($answer instanceof YesNoAnswer) {
+                $arguments[$name] = $answer->yes($ask->threshold);
+            } elseif ($answer instanceof ScoreAnswer) {
+                $arguments[$name] = $answer->level();
+            } else {
+                $arguments[$name] = self::enumCase($subject, $type, $answer->choice);
+            }
         }
 
         return $arguments;
@@ -185,7 +198,8 @@ final class DecisionMapper
     {
         $cases = [];
         foreach (self::of($class, $parameter)::cases() as $case) {
-            $answer = $result->yesNo($parameter->getName().'.'.$case->value);
+            $id = $parameter->getName().'.'.$case->value;
+            $answer = self::answer(sprintf('%s::$%s (question "%s")', $class, $parameter->getName(), $id), $id, $result, $result->yesNo(...), 'yes/no');
             if ($ask->minConfidence !== null && $answer->answerConfidence < $ask->minConfidence) {
                 return null;
             }
@@ -245,12 +259,45 @@ final class DecisionMapper
         return $type->getName();
     }
 
-    private static function enumCase(string $enum, string|int $choice): \BackedEnum
+    /**
+     * The answer to question $id, typed by $typed. A response that doesn't fit the decision class is the server's fault here,
+     * so a missing answer or one of another type becomes a ServerException naming $subject, the parameter it was for.
+     *
+     * @template T of Answer
+     *
+     * @param  \Closure(string): T  $typed  $result->choice(...), ->score(...) or ->yesNo(...)
+     * @return T
+     */
+    private static function answer(string $subject, string $id, Result $result, \Closure $typed, string $kind): Answer
+    {
+        try {
+            return $typed($id);
+        } catch (\OutOfBoundsException $e) {
+            throw new ServerException(sprintf('The laya-serve response has no answer for %s.', $subject), 200, $e);
+        } catch (\UnexpectedValueException $e) {
+            throw new ServerException(sprintf('The laya-serve response answers %s with a %s, not a %s.', $subject, self::kind($result->get($id)), $kind), 200, $e);
+        }
+    }
+
+    private static function kind(Answer $answer): string
+    {
+        if ($answer instanceof ChoiceAnswer) {
+            return 'choice';
+        }
+
+        return $answer instanceof ScoreAnswer ? 'score' : 'yes/no';
+    }
+
+    private static function enumCase(string $subject, string $enum, string|int $choice): \BackedEnum
     {
         /** @var class-string<\BackedEnum> $enum */
         $int = (string) new \ReflectionEnum($enum)->getBackingType() === 'int';
 
-        return $enum::from($int ? (int) $choice : (string) $choice);
+        try {
+            return $enum::from($int ? (int) $choice : (string) $choice);
+        } catch (\ValueError $e) {
+            throw new ServerException(sprintf('The laya-serve response answers %s with "%s", which isn\'t a %s case.', $subject, $choice, new \ReflectionClass($enum)->getShortName()), 200, $e);
+        }
     }
 
     /**

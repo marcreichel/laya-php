@@ -310,3 +310,21 @@ it('fails when laya-serve is unreachable', function () {
     expect(Artisan::call('laya:try', ['class' => 'Decisions\Triage', 'state' => 'x']))->toBe(1)
         ->and(Artisan::output())->toBe("Could not reach laya-serve at http://laya.local: Connection refused\n");
 });
+
+it('fails clearly when the response does not fit the decision class', function (array $answers, string $message) {
+    app()->instance(Laya::class, layaRespondingWith(200, ['answers' => array_filter($answers + LAYA_RESPONSE['answers'])] + LAYA_RESPONSE));
+
+    expect(Artisan::call('laya:try', ['class' => 'Decisions\Triage', 'state' => 'x']))->toBe(1)
+        ->and(Artisan::output())->toBe($message."\n");
+})->with([
+    'missing answer' => [['department' => null], 'The laya-serve response has no answer for App\Decisions\Triage::$department.'],
+    'another answer type' => [['urgency' => ['type' => 'choice', 'choice' => 'billing']], 'The laya-serve response answers App\Decisions\Triage::$urgency with a choice, not a score.'],
+    'unknown label' => [['department' => ['type' => 'choice', 'choice' => 'refunds']], 'The laya-serve response answers App\Decisions\Triage::$department with "refunds", which isn\'t a Department case.'],
+]);
+
+it('fails clearly when an #[Of] case answer is missing', function () {
+    app()->instance(Laya::class, layaRespondingWith(200, ['answers' => ['areas.billing' => ['type' => 'noul', 'noul' => 0.9], 'churn' => ['type' => 'noul', 'noul' => 0.1]]]));
+
+    expect(Artisan::call('laya:try', ['class' => Areas::class, 'state' => 'x']))->toBe(1)
+        ->and(Artisan::output())->toBe("The laya-serve response has no answer for App\\Decisions\\Areas::\$areas (question \"areas.docs.api\").\n");
+});
