@@ -149,6 +149,31 @@ if ($result->choice('department')->answerConfidence < 0.7) {
 
 Servers that only follow TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json), such as [sys1](https://github.com/alvarobartt/sys1), don't send an `answer_confidence`. Then `answerConfidence` falls back to `confidence`, and a yes/no answer without a `confidence` gets laya's own `max(P(yes), P(no))`. Thresholds and `minConfidence` keep working, though `confidence` is stricter than the calibrated value for choice and score answers. The same applies to laya-serve 0.3.24 or later started with `LAYA_JEV_STRICT=1`, which strips `answer_confidence`, `routing` and the truncation report from its responses, so `routedModel` is `null` and `truncated` is always `false` there.
 
+### Abstention on the server
+
+laya-serve can gate answers itself. Pass `minConfidence`, and every answer reports how the gate decided it, measured on `answerConfidence`:
+
+```php
+use MarcReichel\Laya\Abstention;
+
+$result = $laya->predict($ticket, $questions, minConfidence: 0.7);
+
+$result->choice('department')->abstention;          // Abstention::Abstained
+$result->choice('department')->abstentionThreshold; // 0.7
+$result->choice('department')->lowConfidence;       // true: below the threshold
+$result->choice('department')->choice;              // 'billing': laya keeps the answer either way
+```
+
+`abstention` is `Passed`, `Abstained`, or `Unevaluated` when the answer carried no usable confidence. Without `minConfidence`, it and `abstentionThreshold` are `null` and `lowConfidence` is `false`.
+
+One threshold doesn't transfer across option counts, so laya-serve 0.3.25 and later also take a threshold per type and option count (`2`, `3-5`, `6-10` or `11+`), with `default` for the rest. Fit one with `laya.calibrate.fit_abstention_thresholds`:
+
+```php
+$laya->predict($ticket, $questions, minConfidence: ['choice:3-5' => 0.6, 'noul:2' => 0.8, 'default' => 0.7]);
+```
+
+`predictMany()`, `decide()` and `decideMany()` take `minConfidence` too. A threshold outside 0 to 1, an empty map or a bucket laya doesn't know throws an `InvalidOptionException` before anything is sent. `#[Ask(minConfidence: ...)]` on a [decision class](#decisions-into-objects) is a separate gate, on the client: it turns the parameter into `null`.
+
 ### State
 
 `state` can be a string, an array (a JSON document, or a list of conversation turns), or any `JsonSerializable`, such as your own models:
@@ -479,6 +504,7 @@ Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`
 | Exception | When |
 |---|---|
 | `InvalidQuestionException` | a question or decision class is malformed; thrown before any request is sent |
+| `InvalidOptionException` | a request option is malformed, such as a `minConfidence` outside 0 to 1; thrown before any request is sent |
 | `ValidationException` | laya rejected the request (400/413/422); the message names the problem |
 | `AuthenticationException` | wrong or missing API key (401) |
 | `ServerBusyException` | laya-serve is at its concurrency limit (503); safe to retry |
@@ -523,6 +549,8 @@ $laya->assertDecided(Triage::class, fn ($state, ?string $model) => str_contains(
 ```
 
 An `#[Of]` parameter takes the cases (or their values) that apply, and the fake answers each case's question with yes or no: `Laya::fake(['topics' => [Topic::Billing, 'account']])`.
+
+With `minConfidence`, the fake gates its answers the way laya-serve does, so `abstention`, `abstentionThreshold` and `lowConfidence` follow from the answers you register.
 
 The fake reports the model you pin as `routedModel`. Without one it reports `'multilingual'`, matching laya-serve's default for text whose language it can't identify.
 

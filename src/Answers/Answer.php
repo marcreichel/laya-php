@@ -4,10 +4,20 @@ declare(strict_types=1);
 
 namespace MarcReichel\Laya\Answers;
 
+use MarcReichel\Laya\Abstention;
 use MarcReichel\Laya\Exceptions\ServerException;
 
 abstract readonly class Answer
 {
+    /** How laya-serve's abstention gate decided this answer; null when the request set no minConfidence. */
+    public ?Abstention $abstention;
+
+    /** The threshold the gate measured this answer against: with a per-bucket minConfidence, its bucket's. */
+    public ?float $abstentionThreshold;
+
+    /** The gate abstained: answerConfidence fell below the threshold. laya keeps the answer either way. */
+    public bool $lowConfidence;
+
     /**
      * @param  float  $confidence  laya's per-type confidence (max probability, normalised for the option count)
      * @param  float  $answerConfidence  the calibrated confidence; comparable across question types, so use it for gating.
@@ -18,7 +28,11 @@ abstract readonly class Answer
         public float $confidence,
         public float $answerConfidence,
         public array $raw,
-    ) {}
+    ) {
+        $this->abstention = is_string($raw['abstention'] ?? null) ? Abstention::tryFrom($raw['abstention']) : null;
+        $this->abstentionThreshold = is_numeric($raw['abstention_threshold'] ?? null) ? (float) $raw['abstention_threshold'] : null;
+        $this->lowConfidence = ($raw['low_confidence'] ?? false) === true;
+    }
 
     /** @param array<mixed> $raw */
     public static function fromArray(string $id, array $raw): self
