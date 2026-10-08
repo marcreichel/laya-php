@@ -10,6 +10,7 @@ use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
 use MarcReichel\Laya\Attributes\Of;
+use MarcReichel\Laya\Attributes\Scale;
 
 enum Department: string
 {
@@ -74,4 +75,17 @@ final readonly class Codes
 {
     /** @param list<Code> $codes */
     public function __construct(#[Ask('Is the code {case}?'), Of(Code::class)] public array $codes) {}
+}
+
+#[Scale]
+enum Urgency: string
+{
+    #[Describe('can wait')]
+    case Low = 'low';
+    case High = 'high';
+}
+
+final readonly class Urgent
+{
+    public function __construct(#[Ask('How urgent is this?')] public Urgency $urgency) {}
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MarcReichel\Laya\Testing;
 
 use Http\Discovery\Psr17FactoryDiscovery;
+use MarcReichel\Laya\DecisionMapper;
 use MarcReichel\Laya\Laya;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
@@ -101,7 +102,10 @@ final class FakeHttpClient implements ClientInterface
      */
     private function answer(string $id, array $question, string|int|float|bool|\BackedEnum|null $value): array
     {
-        $value = $value instanceof \BackedEnum ? $value->value : $value;
+        if ($value instanceof \BackedEnum) {
+            // A #[Scale] case answers with its level index.
+            $value = DecisionMapper::isScale($value::class) ? array_search($value, $value::cases(), true) : $value->value;
+        }
         $criteria = self::array($question['criteria'] ?? []);
 
         if ($value === null) {

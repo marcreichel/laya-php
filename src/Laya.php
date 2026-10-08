@@ -88,7 +88,7 @@ final class Laya
      *
      *     $laya = Laya::fake(['department' => 'billing', 'urgency' => 2, 'churn' => true]);
      *
-     * Choice answers take a label (or backed enum case), score answers a level index,
+     * Choice answers take a label (or backed enum case), score answers a level index (or #[Scale] enum case),
      * yes/no answers a bool or a probability, and null means laya is unsure (zero confidence).
      * An #[Of] parameter of a decision class takes the list of cases (or values) that apply,
      * and fakes its per-case questions from it. An unregistered question throws.
