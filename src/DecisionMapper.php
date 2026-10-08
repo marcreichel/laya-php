@@ -24,6 +24,8 @@ use MarcReichel\Laya\Exceptions\ServerException;
  * A nullable parameter with #[Ask(minConfidence: ...)] is null when laya is unsure.
  *
  * @internal
+ *
+ * @phpstan-type Entry array{questions: array<string, Question>, parameters: list<array{name: string, type: string, ask: Ask, scale: bool, of: class-string<\BackedEnum>|null}>}
  */
 final class DecisionMapper
 {
@@ -31,30 +33,19 @@ final class DecisionMapper
     private const int MAX_QUESTIONS = 64; // @pest-mutate-ignore
 
     /**
+     * Per class: its questions, and what values() needs per constructor parameter. Built once per process by entry(); failures aren't stored.
+     *
+     * @var array<class-string, Entry>
+     */
+    private static array $entries = [];
+
+    /**
      * @param  class-string  $class
      * @return array<string, Question>
      */
     public static function questions(string $class): array
     {
-        $questions = [];
-        $expanded = [];
-        foreach (self::parameters($class) as $parameter) {
-            if (self::typeName($class, $parameter) === 'array') {
-                $questions += self::caseQuestions($class, $parameter);
-                $expanded[] = '$'.$parameter->getName();
-            } else {
-                $questions[$parameter->getName()] = self::question($class, $parameter);
-            }
-        }
-
-        if ($expanded !== [] && count($questions) > self::MAX_QUESTIONS) {
-            throw new InvalidQuestionException(sprintf(
-                '%s asks %d questions, but laya-serve answers at most %d per request. %s ask%s one question per enum case.',
-                $class, count($questions), self::MAX_QUESTIONS, implode(', ', $expanded), count($expanded) === 1 ? 's' : '',
-            ));
-        }
-
-        return $questions;
+        return self::entry($class)['questions'];
     }
 
     /**
@@ -77,17 +68,13 @@ final class DecisionMapper
     public static function values(string $class, Result $result): array
     {
         $arguments = [];
-        foreach (self::parameters($class) as $parameter) {
-            $name = $parameter->getName();
-            $type = self::typeName($class, $parameter);
-            $ask = self::ask($class, $parameter);
-            if ($type === 'array') {
-                $arguments[$name] = self::cases($class, $parameter, $ask, $result);
+        foreach (self::entry($class)['parameters'] as ['name' => $name, 'type' => $type, 'ask' => $ask, 'scale' => $scale, 'of' => $of]) {
+            if ($of !== null) {
+                $arguments[$name] = self::cases($class, $name, $of, $ask, $result);
 
                 continue;
             }
             $subject = $class.'::$'.$name;
-            $scale = self::isScale($type);
             $answer = match ($scale ? 'int' : $type) {
                 'bool' => self::answer($subject, $name, $result, $result->yesNo(...), 'yes/no'),
                 'int' => self::answer($subject, $name, $result, $result->score(...), 'score'),
@@ -112,6 +99,48 @@ final class DecisionMapper
 
     /**
      * @param  class-string  $class
+     * @return Entry
+     */
+    private static function entry(string $class): array
+    {
+        if (isset(self::$entries[$class])) {
+            return self::$entries[$class];
+        }
+
+        $questions = [];
+        $parameters = [];
+        $expanded = [];
+        foreach (self::parameters($class) as $parameter) {
+            $name = $parameter->getName();
+            $type = self::typeName($class, $parameter);
+            $ask = self::ask($class, $parameter);
+            if ($type === 'array') {
+                $questions += self::caseQuestions($class, $parameter, $ask);
+                $expanded[] = '$'.$name;
+            } else {
+                $questions[$name] = self::question($class, $parameter, $ask, $type);
+            }
+            $parameters[] = [
+                'name' => $name,
+                'type' => $type,
+                'ask' => $ask,
+                'scale' => self::isScale($type),
+                'of' => $type === 'array' ? self::of($class, $parameter) : null,
+            ];
+        }
+
+        if ($expanded !== [] && count($questions) > self::MAX_QUESTIONS) {
+            throw new InvalidQuestionException(sprintf(
+                '%s asks %d questions, but laya-serve answers at most %d per request. %s ask%s one question per enum case.',
+                $class, count($questions), self::MAX_QUESTIONS, implode(', ', $expanded), count($expanded) === 1 ? 's' : '',
+            ));
+        }
+
+        return self::$entries[$class] = ['questions' => $questions, 'parameters' => $parameters];
+    }
+
+    /**
+     * @param  class-string  $class
      * @return list<\ReflectionParameter>
      */
     private static function parameters(string $class): array
@@ -124,11 +153,8 @@ final class DecisionMapper
         return $parameters;
     }
 
-    private static function question(string $class, \ReflectionParameter $parameter): Question
+    private static function question(string $class, \ReflectionParameter $parameter, Ask $ask, string $type): Question
     {
-        $ask = self::ask($class, $parameter);
-        $type = self::typeName($class, $parameter);
-
         self::assertNullable($class, $parameter, $ask, $type);
 
         if ($type === 'bool') {
@@ -187,9 +213,8 @@ final class DecisionMapper
      *
      * @return array<string, Question>
      */
-    private static function caseQuestions(string $class, \ReflectionParameter $parameter): array
+    private static function caseQuestions(string $class, \ReflectionParameter $parameter, Ask $ask): array
     {
-        $ask = self::ask($class, $parameter);
         self::assertNullable($class, $parameter, $ask, 'array');
         self::assertNoYesNo($class, $parameter, $ask);
         $enum = self::of($class, $parameter);
@@ -211,14 +236,15 @@ final class DecisionMapper
     /**
      * The cases whose P(yes) reaches the threshold, in declaration order; null when any answer is below minConfidence.
      *
+     * @param  class-string<\BackedEnum>  $enum
      * @return list<\BackedEnum>|null
      */
-    private static function cases(string $class, \ReflectionParameter $parameter, Ask $ask, Result $result): ?array
+    private static function cases(string $class, string $name, string $enum, Ask $ask, Result $result): ?array
     {
         $cases = [];
-        foreach (self::of($class, $parameter)::cases() as $case) {
-            $id = $parameter->getName().'.'.$case->value;
-            $answer = self::answer(sprintf('%s::$%s (question "%s")', $class, $parameter->getName(), $id), $id, $result, $result->yesNo(...), 'yes/no');
+        foreach ($enum::cases() as $case) {
+            $id = $name.'.'.$case->value;
+            $answer = self::answer(sprintf('%s::$%s (question "%s")', $class, $name, $id), $id, $result, $result->yesNo(...), 'yes/no');
             if ($ask->minConfidence !== null && $answer->answerConfidence < $ask->minConfidence) {
                 return null;
             }
@@ -310,7 +336,7 @@ final class DecisionMapper
     private static function enumCase(string $subject, string $enum, string|int $choice): \BackedEnum
     {
         /** @var class-string<\BackedEnum> $enum */
-        $int = (string) new \ReflectionEnum($enum)->getBackingType() === 'int';
+        $int = is_int($enum::cases()[0]->value); // a choice enum has cases, or entry() would have thrown
 
         try {
             return $enum::from($int ? (int) $choice : (string) $choice);
