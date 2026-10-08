@@ -96,11 +96,13 @@ final class DecisionMapper
 
                 continue;
             }
-            $arguments[$name] = match (true) {
-                $answer instanceof YesNoAnswer => $answer->yes($ask->threshold),
-                $answer instanceof ScoreAnswer => $answer->level(),
-                default => self::enumCase($subject, $type, $answer->choice),
-            };
+            if ($answer instanceof YesNoAnswer) {
+                $arguments[$name] = $answer->yes($ask->threshold);
+            } elseif ($answer instanceof ScoreAnswer) {
+                $arguments[$name] = $answer->level();
+            } else {
+                $arguments[$name] = self::enumCase($subject, $type, $answer->choice);
+            }
         }
 
         return $arguments;
@@ -279,11 +281,11 @@ final class DecisionMapper
 
     private static function kind(Answer $answer): string
     {
-        return match (true) {
-            $answer instanceof ChoiceAnswer => 'choice',
-            $answer instanceof ScoreAnswer => 'score',
-            default => 'yes/no',
-        };
+        if ($answer instanceof ChoiceAnswer) {
+            return 'choice';
+        }
+
+        return $answer instanceof ScoreAnswer ? 'score' : 'yes/no';
     }
 
     private static function enumCase(string $subject, string $enum, string|int $choice): \BackedEnum
