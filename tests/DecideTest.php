@@ -6,6 +6,7 @@ use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Levels;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
+use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Model;
 use PHPUnit\Framework\AssertionFailedError;
@@ -160,4 +161,50 @@ it('asserts a decision class was decided', function () {
         ->and(fn () => $laya->assertDecided(Triage::class, fn ($state, $model) => $state === 'Refund me.' && $model === 'english'))->not->toThrow(AssertionFailedError::class)
         ->and(fn () => $laya->assertDecided(Triage::class, fn ($state) => $state === 'other'))->toThrow(AssertionFailedError::class, 'Expected Triage to be decided')
         ->and(fn () => $laya->assertDecided(Gated::class))->toThrow(AssertionFailedError::class);
+});
+
+/** Triage's answers, with $changes applied; a null change drops the answer. */
+function triageResponse(array $changes = []): array
+{
+    $answers = array_filter($changes + [
+        'department' => ['type' => 'choice', 'choice' => 'billing'],
+        'urgency' => ['type' => 'score', 'score' => 2.0, 'probabilities' => [0.1, 0.1, 0.8]],
+        'churn' => ['type' => 'noul', 'noul' => 0.9],
+        'priority' => ['type' => 'choice', 'choice' => 1],
+    ]);
+
+    return ['answers' => $answers];
+}
+
+it('throws a ServerException when the response does not fit the decision class', function (array $changes, string $message, string $previous) {
+    expect(fn () => layaRespondingWith(200, triageResponse($changes))->decide('x', Triage::class))
+        ->toThrow(function (ServerException $e) use ($message, $previous) {
+            expect($e->getMessage())->toBe($message)
+                ->and($e->status)->toBe(200)
+                ->and($e->getPrevious())->toBeInstanceOf($previous);
+        });
+})->with([
+    'missing answer' => [['department' => null], 'The laya-serve response has no answer for Triage::$department.', OutOfBoundsException::class],
+    'score for a choice' => [['department' => ['type' => 'score', 'score' => 1.0]], 'The laya-serve response answers Triage::$department with a score, not a choice.', UnexpectedValueException::class],
+    'yes/no for a score' => [['urgency' => ['type' => 'noul', 'noul' => 0.5]], 'The laya-serve response answers Triage::$urgency with a yes/no, not a score.', UnexpectedValueException::class],
+    'choice for a yes/no' => [['churn' => ['type' => 'choice', 'choice' => 'billing']], 'The laya-serve response answers Triage::$churn with a choice, not a yes/no.', UnexpectedValueException::class],
+    'unknown string label' => [['department' => ['type' => 'choice', 'choice' => 'refunds']], 'The laya-serve response answers Triage::$department with "refunds", which isn\'t a Department case.', ValueError::class],
+    'unknown int label' => [['priority' => ['type' => 'choice', 'choice' => 5]], 'The laya-serve response answers Triage::$priority with "5", which isn\'t a Priority case.', ValueError::class],
+]);
+
+it('checks the answer type before minConfidence', function () {
+    $body = ['answers' => [
+        'department' => ['type' => 'noul', 'noul' => 0.9, 'answer_confidence' => 0.1],
+        'urgency' => ['type' => 'score', 'score' => 1.0, 'probabilities' => [0.2, 0.8]],
+        'churn' => ['type' => 'noul', 'noul' => 0.3],
+    ]];
+
+    expect(fn () => layaRespondingWith(200, $body)->decide('x', Gated::class))
+        ->toThrow(ServerException::class, 'The laya-serve response answers Gated::$department with a yes/no, not a choice.');
+});
+
+it('throws a ServerException from decideMany when a response does not fit the decision class', function () {
+    // layaBatching() answers department, urgency and churn, but not Triage's priority.
+    expect(fn () => layaBatching()->decideMany(['a' => 'x'], Triage::class))
+        ->toThrow(ServerException::class, 'The laya-serve response has no answer for Triage::$priority.');
 });

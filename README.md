@@ -508,7 +508,7 @@ Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`
 | `ValidationException` | laya rejected the request (400/413/422); the message names the problem |
 | `AuthenticationException` | wrong or missing API key (401) |
 | `ServerBusyException` | laya-serve is at its concurrency limit (503); safe to retry |
-| `ServerException` | any other error status, or a response that isn't laya-shaped |
+| `ServerException` | any other error status, or a response that isn't laya-shaped or doesn't fit the decision class (a missing answer, another answer type, a label that isn't an enum case) |
 | `TransportException` | laya-serve couldn't be reached |
 
 The SDK doesn't retry. For retries, pass an HTTP client that has them, such as Symfony's `RetryableHttpClient` or Guzzle with retry middleware:

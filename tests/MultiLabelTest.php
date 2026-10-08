@@ -7,6 +7,7 @@ use MarcReichel\Laya\Attributes\Describe;
 use MarcReichel\Laya\Attributes\Of;
 use MarcReichel\Laya\DecisionMapper;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
+use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Question;
 use PHPUnit\Framework\AssertionFailedError;
@@ -270,4 +271,24 @@ it('names the #[Of] parameters that take a class past 64 questions', function (o
     {
         public function __construct(#[Ask('Is it {case}?'), Of(Wide::class)] public array $a, #[Ask('Is it {case}?'), Of(Severity::class)] public array $b) {}
     }, 'asks 66 questions, but laya-serve answers at most 64 per request. $a, $b ask one question per enum case.'],
+]);
+
+it('throws a ServerException when a case answer does not fit', function (array $answers, string $message, string $previous) {
+    expect(fn () => layaRespondingWith(200, ['answers' => $answers])->decide('x', Tagging::class))
+        ->toThrow(function (ServerException $e) use ($message, $previous) {
+            expect($e->getMessage())->toBe($message)
+                ->and($e->status)->toBe(200)
+                ->and($e->getPrevious())->toBeInstanceOf($previous);
+        });
+})->with([
+    'missing case answer' => [
+        taggingResponse(['topics.billing' => 0.9, 'topics.shipping' => 0.1, 'churn' => 0.1])['answers'],
+        'The laya-serve response has no answer for Tagging::$topics (question "topics.account").',
+        OutOfBoundsException::class,
+    ],
+    'choice for a case' => [
+        ['topics.billing' => ['type' => 'choice', 'choice' => 'yes']] + taggingResponse(['topics.account' => 0.1, 'topics.shipping' => 0.1, 'churn' => 0.1])['answers'],
+        'The laya-serve response answers Tagging::$topics (question "topics.billing") with a choice, not a yes/no.',
+        UnexpectedValueException::class,
+    ],
 ]);
