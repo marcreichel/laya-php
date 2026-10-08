@@ -1,0 +1,23 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["config:recommended"],
+    "schedule": ["before 6am on monday"],
+    "packageRules": [
+        {
+            "description": "The supported PHP versions are a release decision, not a dependency update.",
+            "matchPackageNames": ["php"],
+            "enabled": false
+        },
+        {
+            "description": "A library widens its runtime ranges, so apps that still need the older major can install it.",
+            "matchManagers": ["composer"],
+            "matchDepTypes": ["require"],
+            "rangeStrategy": "widen"
+        },
+        {
+            "matchManagers": ["composer"],
+            "matchDepTypes": ["require-dev"],
+            "rangeStrategy": "bump"
+        }
+    ]
+}
