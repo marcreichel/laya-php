@@ -3,13 +3,13 @@
 declare(strict_types=1);
 
 use GuzzleHttp\Psr7\Response;
-use Illuminate\Cache\Repository;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Question;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\SimpleCache\CacheInterface;
 
 /**
  * A Laya that answers every request with $status/$body and records what it sent.
@@ -54,7 +54,7 @@ final class RecordingDispatcher implements EventDispatcherInterface
  *
  * @param  list<RequestInterface>  $sent
  */
-function layaBatching(array &$sent = [], ?Repository $cache = null, ?EventDispatcherInterface $events = null, bool $includeState = false): Laya
+function layaBatching(array &$sent = [], ?CacheInterface $cache = null, ?EventDispatcherInterface $events = null, bool $includeState = false): Laya
 {
     $client = new class($sent) implements ClientInterface
     {
