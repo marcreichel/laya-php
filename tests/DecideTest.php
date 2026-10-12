@@ -214,3 +214,13 @@ it('throws a ServerException from decideMany when a response does not fit the de
     expect(fn () => layaBatching()->decideMany(['a' => 'x'], Triage::class))
         ->toThrow(ServerException::class, 'The laya-serve response has no answer for Triage::$priority.');
 });
+
+it('returns the raw result next to the decision', function () {
+    $laya = Laya::fake(['department' => Department::Billing, 'urgency' => 2, 'churn' => true, 'priority' => Priority::High]);
+
+    $decision = $laya->decideWithResult('Billed twice', Triage::class);
+
+    expect($decision->value)->toEqual(new Triage(Department::Billing, 2, true, Priority::High))
+        ->and($decision->result->choice('department')->choice)->toBe('billing');
+    $laya->assertDecided(Triage::class);
+});

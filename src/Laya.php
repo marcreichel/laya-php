@@ -287,13 +287,32 @@ final class Laya
      */
     public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): object
     {
+        return $this->decideWithResult($state, $class, $model, $maxLen, $headMaxLen, $minConfidence)->value;
+    }
+
+    /**
+     * decide() that keeps the raw Result (probabilities, confidences, truncation) next to the instance.
+     *
+     *     $decision = $laya->decideWithResult($ticket, Triage::class);
+     *     $decision->value;                                          // Triage
+     *     $decision->result->choice('department')->probabilities;
+     *
+     * @template T of object
+     *
+     * @param  string|array<mixed>|\JsonSerializable  $state
+     * @param  class-string<T>  $class
+     * @param  float|array<string, float>|null  $minConfidence  laya-serve's abstention gate; see predict()
+     * @return Decision<T>
+     */
+    public function decideWithResult(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): Decision
+    {
         try {
             $result = $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence);
         } catch (ValidationException $e) {
             throw self::named($e, $class);
         }
 
-        return DecisionMapper::hydrate($class, $result);
+        return new Decision(DecisionMapper::hydrate($class, $result), $result);
     }
 
     /**
@@ -311,13 +330,31 @@ final class Laya
      */
     public function decideMany(array $states, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): array
     {
+        return array_map(fn (Decision $decision) => $decision->value, $this->decideManyWithResult($states, $class, $model, $maxLen, $headMaxLen, $minConfidence));
+    }
+
+    /**
+     * decideMany() that keeps the raw Result next to each instance. Decisions keep the keys of $states.
+     *
+     * @experimental needs laya-serve >= 0.3.22 (>= 0.3.23 for token budgets), and may change in a minor release
+     *
+     * @template T of object
+     * @template K of array-key
+     *
+     * @param  array<K, string|array<mixed>|\JsonSerializable>  $states
+     * @param  class-string<T>  $class
+     * @param  float|array<string, float>|null  $minConfidence  laya-serve's abstention gate, for every state; see predict()
+     * @return array<K, Decision<T>>
+     */
+    public function decideManyWithResult(array $states, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): array
+    {
         try {
             $results = $this->predictMany($states, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence);
         } catch (ValidationException $e) {
             throw self::named($e, $class);
         }
 
-        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $results);
+        return array_map(fn (Result $result) => new Decision(DecisionMapper::hydrate($class, $result), $result), $results);
     }
 
     /** The server's rejection, prefixed with the decision class that asked. */

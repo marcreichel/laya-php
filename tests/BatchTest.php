@@ -200,3 +200,14 @@ it('records each state of a faked batch as its own prediction', function () {
     $laya->assertPredicted(fn ($state, $questions, $model) => $state === 'Thanks' && $model === 'english');
     $laya->assertDecided(BatchTriage::class, fn ($state) => $state === 'Cancel now');
 });
+
+it('returns the raw result next to each decision of a batch, keeping the keys', function () {
+    $laya = Laya::fake(['churn' => true]);
+
+    $decisions = $laya->decideManyWithResult(['a' => 'Cancel now', 'b' => 'Thanks'], BatchTriage::class);
+
+    expect(array_keys($decisions))->toBe(['a', 'b'])
+        ->and($decisions['b']->value->churn)->toBeTrue()
+        ->and($decisions['b']->result->yesNo('churn')->yes())->toBeTrue();
+    $laya->assertDecided(BatchTriage::class, fn ($state) => $state === 'Thanks');
+});

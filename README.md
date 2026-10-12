@@ -373,7 +373,24 @@ if ($triage->department === null) {
 | `yes`, `no` | `bool` | describe what yes and no mean |
 | `threshold` | `bool`, `array` with `#[Of]` | `true`, or the case is listed, when P(yes) ≥ threshold (default 0.5) |
 
-For the full probabilities, use `predict()`.
+### Keeping the probabilities
+
+`decideWithResult()` returns the instance and the raw `Result` it was read from, for logging, auditing or tuning `minConfidence` and `threshold`:
+
+```php
+$decision = $laya->decideWithResult($ticket, Triage::class);
+
+$decision->value;                                         // Triage
+$decision->result->choice('department')->probabilities;
+$decision->result->choice('department')->answerConfidence;
+$decision->result->truncated;
+
+$decisions = $laya->decideManyWithResult($tickets->pluck('body', 'id')->all(), Triage::class);
+$decisions[42]->value;
+$decisions[42]->result;
+```
+
+`decideManyWithResult()` is experimental like `decideMany()` and keeps the keys of the states.
 
 ## Recipes
 
