@@ -109,7 +109,7 @@ final class DecisionMapper
     {
         $data = [];
         foreach (self::entry($class)['parameters'] as ['name' => $name]) {
-            $data[$name] = $decision->$name;
+            $data[$name] = new \ReflectionProperty($class, $name)->getValue($decision); // also reads private promoted properties
         }
 
         return $data;

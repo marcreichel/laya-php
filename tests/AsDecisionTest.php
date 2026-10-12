@@ -14,6 +14,7 @@ use App\Decisions\Urgent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use MarcReichel\Laya\Attributes\Ask;
 use MarcReichel\Laya\Exceptions\InvalidDecisionCastException;
 use MarcReichel\Laya\Laravel\AsDecision;
 use Orchestra\Testbench\TestCase;
@@ -21,6 +22,16 @@ use Orchestra\Testbench\TestCase;
 require_once __DIR__.'/Fixtures/Decisions.php';
 
 uses(TestCase::class);
+
+final readonly class Hidden
+{
+    public function __construct(#[Ask('Which department?')] private Department $department) {}
+
+    public function department(): Department
+    {
+        return $this->department;
+    }
+}
 
 final class CastTicket extends Model
 {
@@ -39,6 +50,7 @@ final class CastTicket extends Model
             'coded' => AsDecision::of(Coded::class),
             'urgent' => AsDecision::of(Urgent::class),
             'prospect' => AsDecision::of(Prospect::class),
+            'hidden' => AsDecision::of(Hidden::class),
         ];
     }
 }
@@ -47,7 +59,7 @@ beforeEach(function () {
     config(['database.default' => 'testing', 'database.connections.testing' => ['driver' => 'sqlite', 'database' => ':memory:']]);
     Schema::create('tickets', function ($table) {
         $table->id();
-        foreach (['triage', 'string_form', 'areas', 'coded', 'urgent', 'prospect'] as $column) {
+        foreach (['triage', 'string_form', 'areas', 'coded', 'urgent', 'prospect', 'hidden'] as $column) {
             $table->json($column)->nullable();
         }
     });
@@ -130,6 +142,18 @@ it('rejects a list that is not a list', function () {
     DB::table('tickets')->insert(['areas' => '{"areas":"billing","churn":true}']);
 
     expect(fn () => CastTicket::first()->areas)->toThrow(InvalidDecisionCastException::class, 'it has no list for $areas');
+});
+
+it('rejects a JSON object where a list belongs', function () {
+    DB::table('tickets')->insert(['areas' => '{"areas":{"extra":"docs.api"},"churn":true}']);
+
+    expect(fn () => CastTicket::first()->areas)->toThrow(InvalidDecisionCastException::class, 'it has no list for $areas');
+});
+
+it('stores a decision with private promoted properties', function () {
+    $ticket = CastTicket::create(['hidden' => new Hidden(Department::Other)]);
+
+    expect($ticket->fresh()->hidden->department())->toBe(Department::Other);
 });
 
 it('needs a decision class', function () {

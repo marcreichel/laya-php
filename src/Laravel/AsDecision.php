@@ -43,12 +43,12 @@ final class AsDecision implements Castable
                 }
 
                 try {
-                    $data = json_decode($value, true);
-                    if (! is_array($data)) {
+                    $data = json_decode($value);
+                    if (! $data instanceof \stdClass) {
                         throw new \UnexpectedValueException('is not a JSON object');
                     }
 
-                    return DecisionMapper::fromArray($this->class, $data);
+                    return DecisionMapper::fromArray($this->class, (array) $data);
                 } catch (\UnexpectedValueException $e) {
                     throw new InvalidDecisionCastException(sprintf('%s::$%s holds a value that doesn\'t fit %s: it %s.', $model::class, $key, $this->class, $e->getMessage()), previous: $e);
                 }
