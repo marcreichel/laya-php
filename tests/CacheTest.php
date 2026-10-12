@@ -20,6 +20,9 @@ final class FailingCache implements CacheInterface
     /** @var array<string, mixed> */
     public array $items = [];
 
+    /** @var array<string, null|int|DateInterval> */
+    public array $ttls = [];
+
     public function __construct(private ?Throwable $getError = null, private ?Throwable $setError = null) {}
 
     public function get(string $key, mixed $default = null): mixed
@@ -37,6 +40,7 @@ final class FailingCache implements CacheInterface
             throw $this->setError;
         }
         $this->items[$key] = $value;
+        $this->ttls[$key] = $ttl;
 
         return true;
     }
@@ -324,6 +328,15 @@ it('falls back to the plain key when /health fails or reports no revisions', fun
     'health fails' => [503],
     'sys1, no revisions' => [['status' => 'ok']],
 ]);
+
+it('keeps the revision hash for a minute, under a key of its own', function () {
+    $cache = new FailingCache;
+    ask(layaVersioned($cache, ['status' => 'ok', 'revisions' => ['m' => 'abc']]));
+    $key = array_keys($cache->items)[0];
+
+    expect($key)->toMatch('/^laya\.revisions\.[0-9a-f]{32}$/')
+        ->and($cache->ttls[$key])->toBe(60);
+});
 
 it('versions the keys of predictMany() too', function () {
     $cache = new FailingCache;
