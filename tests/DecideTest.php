@@ -50,9 +50,15 @@ it('asks the questions a decision class declares and hydrates it', function () {
       && $questions['churn']['type'] === 'noul');
 });
 
+it('lists the questions a decision class declares, without asking them', function () {
+    expect(Laya::questions(Triage::class))->toEqual(DecisionMapper::questions(Triage::class))
+        ->toHaveKeys(['department', 'urgency', 'churn', 'priority']);
+});
+
 it('explains what is wrong with an unsupported decision class, on every call', function (object $dto, string $message) {
     expect(fn () => Laya::fake()->decide('x', $dto::class))->toThrow(InvalidQuestionException::class, $message)
-        ->and(fn () => Laya::fake()->decide('x', $dto::class))->toThrow(InvalidQuestionException::class, $message);
+        ->and(fn () => Laya::fake()->decide('x', $dto::class))->toThrow(InvalidQuestionException::class, $message)
+        ->and(fn () => Laya::questions($dto::class))->toThrow(InvalidQuestionException::class, $message);
 })->with([
     'missing #[Ask]' => [new class(true)
     {
