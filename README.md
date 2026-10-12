@@ -53,11 +53,15 @@ For Laravel 13+, the service provider is auto-discovered. It registers `Laya` as
 ```dotenv
 LAYA_URL=http://localhost:8000
 LAYA_API_KEY=
+LAYA_TIMEOUT=       # seconds; needs symfony/http-client (see below)
+LAYA_RETRIES=       # retries on 503 and transport errors, with backoff
 LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
 LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed/CacheFailed (see Events)
 LAYA_EVENTS_INCLUDE_STATE=false
 ```
+
+`LAYA_TIMEOUT` and `LAYA_RETRIES` build the HTTP client with `symfony/http-client` (`composer require symfony/http-client`); setting either without it throws. To use your own client instead, bind `Psr\Http\Client\ClientInterface` in the container or put a service id in `laya.http_client`; it wins over both settings. With none of these set, the SDK discovers a PSR-18 client as before.
 
 `php artisan laya:health` prints the server's status and loaded checkpoints (plus the idle-unload window and idle time when laya-serve runs with `LAYA_IDLE_UNLOAD_SECONDS`, since an idle unload leaves "Loaded: none" on a healthy server), and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
 
@@ -548,7 +552,7 @@ Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`
 | `ServerException` | any other error status, or a response that isn't laya-shaped or doesn't fit the decision class (a missing answer, another answer type, a label that isn't an enum case) |
 | `TransportException` | laya-serve couldn't be reached |
 
-The SDK doesn't retry. For retries, pass an HTTP client that has them, such as Symfony's `RetryableHttpClient` or Guzzle with retry middleware:
+The SDK doesn't retry. In Laravel, set `LAYA_RETRIES` (see Laravel above). Elsewhere, pass an HTTP client that has them, such as Symfony's `RetryableHttpClient` or Guzzle with retry middleware:
 
 ```php
 use Symfony\Component\HttpClient\{HttpClient, Psr18Client, RetryableHttpClient};

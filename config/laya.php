@@ -10,6 +10,15 @@ return [
     // Only needed when laya-serve is started with an API key.
     'api_key' => env('LAYA_API_KEY'),
 
+    // Request timeout in seconds, and how often to retry a busy (503) or unreachable server with backoff.
+    // Either one builds an HTTP client with symfony/http-client; null keeps the SDK's discovered client.
+    'timeout' => env('LAYA_TIMEOUT'),
+    'retries' => env('LAYA_RETRIES'),
+
+    // A container service id of your own PSR-18 client; takes precedence over the two settings above.
+    // Binding Psr\Http\Client\ClientInterface in the container works too.
+    'http_client' => null,
+
     // States per batch request. laya-serve refuses batches over its MAX_BATCH_STATES (64 by default).
     'batch_size' => (int) env('LAYA_BATCH_SIZE', 64),
 
