@@ -19,7 +19,8 @@
         "psr/simple-cache": "^1.0 || ^2.0 || ^3.0"
     },
     "suggest": {
-        "laravel/framework": "The service provider registers Laya from config/laya.php (^13.0, auto-discovered)."
+        "laravel/framework": "The service provider registers Laya from config/laya.php (^13.0, auto-discovered).",
+        "symfony/http-client": "Builds the HTTP client for the Laravel LAYA_TIMEOUT and LAYA_RETRIES settings."
     },
     "autoload": {
         "psr-4": {
@@ -68,6 +69,7 @@
         "laravel/pint": "^1.32",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^5.2",
-        "phpstan/phpstan": "^2.2"
+        "phpstan/phpstan": "^2.2",
+        "symfony/http-client": "^8.1"
     }
 }
