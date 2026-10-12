@@ -137,6 +137,13 @@ it('warns when laya cut the text off', function () {
         ->and(Artisan::output())->toEndWith("Routed to english, 512 input tokens\nlaya cut the text off at its token budget; raise --max-len to read all of it.\n");
 });
 
+it('names the questions laya cut off and the tokens it dropped', function () {
+    app()->instance(Laya::class, layaRespondingWith(200, ['usage' => ['input_tokens' => 512, 'state_tokens_dropped' => 388, 'truncated' => true, 'truncated_questions' => ['department', '<urgency>']]] + LAYA_RESPONSE));
+
+    expect(Artisan::call('laya:try', ['class' => 'Decisions\Triage', 'state' => 'x']))->toBe(0)
+        ->and(Artisan::output())->toEndWith("laya cut the text off at its token budget for department, <urgency> (388 tokens dropped); raise --max-len to read all of it.\n");
+});
+
 it('forwards the model and token budgets', function () {
     $sent = [];
     app()->instance(Laya::class, layaRespondingWith(200, LAYA_RESPONSE, $sent));
@@ -147,7 +154,14 @@ it('forwards the model and token budgets', function () {
 });
 
 it('prints JSON', function () {
-    app()->instance(Laya::class, layaRespondingWith(200, ['usage' => ['input_tokens' => 512, 'truncated' => true]] + LAYA_RESPONSE));
+    app()->instance(Laya::class, layaRespondingWith(200, ['usage' => [
+        'input_tokens' => 512,
+        'state_tokens' => 900,
+        'state_tokens_dropped' => 388,
+        'truncated' => true,
+        'truncated_questions' => ['department'],
+        'options' => ['department' => ['total' => 40, 'distinct' => 12, 'tokens_per_option' => 3]],
+    ]] + LAYA_RESPONSE));
 
     expect(Artisan::call('laya:try', ['class' => 'Decisions\Triage', 'state' => 'x', '--json' => true]))->toBe(0);
 
@@ -157,6 +171,10 @@ it('prints JSON', function () {
         'routed_model' => 'english',
         'input_tokens' => 512,
         'truncated' => true,
+        'state_tokens' => 900,
+        'state_tokens_dropped' => 388,
+        'truncated_questions' => ['department'],
+        'collapsed_options' => ['department' => ['total' => 40, 'distinct' => 12, 'tokens_per_option' => 3]],
         'parameters' => [
             'department' => [
                 'question' => 'Which department should handle this?',
@@ -207,12 +225,12 @@ it('shows float values', function () {
         ->toContain("budget: Is there budget?\n  → 0.8 (answer confidence 0.80)\n");
 });
 
-it('keeps numeric labels an object, and whole numbers floats, in JSON', function () {
+it('keeps numeric labels and no collapsed options an object, and whole numbers floats, in JSON', function () {
     Laya::fake(['code' => Code::Zero]);
 
     Artisan::call('laya:try', ['class' => Coded::class, 'state' => 'x', '--json' => true]);
 
-    expect(Artisan::output())->toContain(<<<'JSON'
+    expect(Artisan::output())->toContain('"collapsed_options": {},')->toContain(<<<'JSON'
                     "value": 0,
                     "answer_confidence": 1.0,
                     "probabilities": {
