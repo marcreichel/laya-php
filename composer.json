@@ -22,6 +22,9 @@
         "laravel/framework": "The service provider registers Laya from config/laya.php (^13.0, auto-discovered).",
         "symfony/http-client": "Builds the HTTP client for the Laravel LAYA_TIMEOUT and LAYA_RETRIES settings."
     },
+    "bin": [
+        "bin/laya-eval"
+    ],
     "autoload": {
         "psr-4": {
             "MarcReichel\\Laya\\": "src/"

@@ -42,7 +42,7 @@ final class TryCommand extends Command
     public function handle(Laya $laya): int
     {
         try {
-            $class = $this->decisionClass();
+            $class = self::decisionClass($this->stringArgument('class'));
             $state = $this->state();
             $model = $this->model();
             $maxLen = $this->budget('max-len');
@@ -65,10 +65,16 @@ final class TryCommand extends Command
         return self::SUCCESS;
     }
 
-    /** @return class-string */
-    private function decisionClass(): string
+    /**
+     * $name as given, or under App\. Shared with laya:eval.
+     *
+     * @internal
+     *
+     * @return class-string
+     */
+    public static function decisionClass(string $name): string
     {
-        $name = ltrim($this->stringArgument('class'), '\\');
+        $name = ltrim($name, '\\');
         foreach ([$name, 'App\\'.$name] as $class) {
             if (class_exists($class)) {
                 return $class;

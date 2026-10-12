@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Measures a decision class against labelled examples without Laravel; see MarcReichel\Laya\EvaluationCli.
+//
+//   vendor/bin/laya-eval "App\Decisions\Triage" triage.csv --precision=0.95
+
+require $_composer_autoload_path ?? __DIR__.'/../vendor/autoload.php';
+
+exit(MarcReichel\Laya\EvaluationCli::run($argv, getenv(), STDOUT, STDERR));
