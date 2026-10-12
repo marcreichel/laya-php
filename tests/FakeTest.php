@@ -121,7 +121,7 @@ it('leaves a container without a Laya binding alone', function () {
     Laya::fake();
 
     expect(Container::getInstance()->bound(Laya::class))->toBeFalse();
-    Container::setInstance(null);
+    Container::setInstance();
 });
 
 it('answers null as unsure: even probabilities, zero confidence', function () {
