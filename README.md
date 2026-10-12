@@ -606,6 +606,14 @@ $laya->assertDecided(Triage::class);
 $laya->assertDecided(Triage::class, fn ($state, ?string $model) => str_contains($state, 'refund'));
 ```
 
+A decision class with a mistake in it, such as an int without `#[Levels]` or a missing `#[Ask]`, throws an `InvalidQuestionException` on its first `decide()`. To catch that in a test of its own, `Laya::questions()` checks the class and returns the questions `decide()` would send:
+
+```php
+it('is a valid decision class', function () {
+    expect(Laya::questions(Triage::class))->toHaveKeys(['department', 'urgency', 'churn']);
+});
+```
+
 A `#[Scale]` parameter takes a case, which the fake answers with that case's level: `Laya::fake(['urgency' => Urgency::Blocking])`. A plain int is a level index, as for any score question.
 
 An `#[Of]` parameter takes the cases (or their values) that apply, and the fake answers each case's question with yes or no: `Laya::fake(['topics' => [Topic::Billing, 'account']])`.

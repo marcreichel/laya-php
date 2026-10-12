@@ -267,6 +267,20 @@ final class Laya
     }
 
     /**
+     * The questions decide() sends for a decision class, by id. Throws what decide() would for a class it can't
+     * take, so a test can check a decision class without a server or a fake:
+     *
+     *     expect(Laya::questions(Triage::class))->toHaveKeys(['department', 'churn']);
+     *
+     * @param  class-string  $class
+     * @return array<string, Question>
+     */
+    public static function questions(string $class): array
+    {
+        return DecisionMapper::questions($class);
+    }
+
+    /**
      * Ask the questions a decision class declares and get an instance of it back.
      *
      *     final class Triage {
