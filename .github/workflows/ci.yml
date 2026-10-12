@@ -29,6 +29,8 @@ jobs:
         if: matrix.dependencies == 'lowest'
       - run: vendor/bin/pint --test
         if: matrix.dependencies == 'highest'
+      - run: vendor/bin/rector process --dry-run --no-progress-bar
+        if: matrix.dependencies == 'highest'
       - run: vendor/bin/phpstan analyse --no-progress
       - run: vendor/bin/pest --coverage --min=100
         if: matrix.dependencies == 'highest'

@@ -56,7 +56,8 @@
         "test:contract": "pest --group=contract",
         "analyse": "phpstan analyse",
         "lint": "pint --test",
-        "format": "pint"
+        "format": "pint",
+        "rector": "rector process --dry-run"
     },
     "config": {
         "sort-packages": true,
@@ -73,6 +74,7 @@
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^5.2",
         "phpstan/phpstan": "^2.2",
+        "rector/rector": "^2.6",
         "symfony/http-client": "^8.1"
     }
 }

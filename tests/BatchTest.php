@@ -65,7 +65,7 @@ it('batches by the configured size, and rejects a size below one', function () {
     $laya->predictMany(['a', 'b', 'c'], questions());
 
     expect(array_map(fn ($r) => count(json_decode((string) $r->getBody(), true)['states']), $sent))->toBe([2, 1])
-        ->and((new Laya(batchSize: 1))->predictMany([], questions()))->toBe([])
+        ->and(new Laya(batchSize: 1)->predictMany([], questions()))->toBe([])
         ->and(fn () => new Laya(batchSize: 0))->toThrow(InvalidOptionException::class, 'batchSize must be at least 1, got 0.');
 });
 

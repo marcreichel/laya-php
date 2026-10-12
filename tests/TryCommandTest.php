@@ -92,7 +92,7 @@ it('runs against Laya::fake(), taking the class with or without App\\', function
         ->toContain('→ true (answer confidence 1.00)')
         ->toContain('technical  ████████████████████  1.00');
     $fake->assertDecided(Triage::class, fn ($state, $model) => $state === 'The app crashes on start.' && $model === null);
-})->with(['App\Decisions\Triage', '\App\Decisions\Triage', '\Decisions\Triage']);
+})->with([Triage::class, Triage::class, '\Decisions\Triage']);
 
 it('shows false and a checkpoint it could not tell', function () {
     $response = ['answers' => [

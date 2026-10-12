@@ -37,11 +37,11 @@ try {
     } else {
         printf("Route to %s\n", $department->choice);
     }
-} catch (TransportException $e) {
+} catch (TransportException) {
     echo "laya-serve is not reachable. Start it with `docker compose up -d --wait`.\n";
-} catch (AuthenticationException $e) {
+} catch (AuthenticationException) {
     echo "Set LAYA_API_KEY to the key laya-serve was started with.\n";
-} catch (ServerBusyException $e) {
+} catch (ServerBusyException) {
     echo "laya-serve is busy, retry shortly.\n";
 } catch (ValidationException $e) {
     echo "laya rejected the request: {$e->getMessage()}\n";
