@@ -34,7 +34,7 @@ final class FakeHttpClient implements ClientInterface
     private ?array $sequence = null;
 
     /** @param array<string, mixed>|object $answers */
-    public function __construct(array|object $answers)
+    public function __construct(array|object $answers, private readonly Limits $limits = new Limits)
     {
         $this->answers = self::answers($answers);
     }
@@ -70,12 +70,65 @@ final class FakeHttpClient implements ClientInterface
 
         $minConfidence = $body['min_confidence'] ?? null;
 
+        $batch = str_ends_with($request->getUri()->getPath(), '/batch');
+        $states = $batch ? self::array($body['states'] ?? null) : [$body['state'] ?? null];
+        if (($violation = $this->violation($states, $questions, $batch)) !== null) {
+            return $this->json(['detail' => $violation], 413);
+        }
+
         // A batch records each state as its own prediction, so assertions don't care whether code batched.
-        if (str_ends_with($request->getUri()->getPath(), '/batch')) {
+        if ($batch) {
             return $this->json(['results' => array_map(fn (mixed $state) => $this->predict($state, $questions, $model, $minConfidence), self::array($body['states'] ?? null))]);
         }
 
         return $this->json($this->predict($body['state'] ?? null, $questions, $model, $minConfidence));
+    }
+
+    /**
+     * The first limit the request breaks, worded like laya-serve's 413, or null.
+     *
+     * @param  array<mixed>  $states
+     * @param  array<mixed>  $questions
+     */
+    private function violation(array $states, array $questions, bool $batch): ?string
+    {
+        $l = $this->limits;
+        $over = static fn (int $count, ?int $max): bool => $max !== null && $count > $max;
+
+        if ($batch && $over(count($states), $l->maxBatchSize)) {
+            return sprintf('too many states in batch (%d > %d)', count($states), $l->maxBatchSize);
+        }
+        if ($over(count($questions), $l->maxQuestions)) {
+            return sprintf('too many questions (%d > %d)', count($questions), $l->maxQuestions);
+        }
+
+        $total = 0;
+        foreach ($questions as $id => $question) {
+            $criteria = is_array($question) ? ($question['criteria'] ?? null) : null;
+            if (! is_array($criteria) || ! in_array($question['type'] ?? null, ['choice', 'score'], true)) {
+                continue;
+            }
+            $count = count($criteria);
+            $total += $count;
+            [$max, $what] = $question['type'] === 'choice' ? [$l->maxChoiceOptions, 'choice options'] : [$l->maxScoreLevels, 'score levels'];
+            if ($over($count, $max)) {
+                return sprintf('too many %s for \'%s\' (%d > %d)', $what, $id, $count, $max);
+            }
+        }
+        if ($over($total, $l->maxTotalOptions)) {
+            return sprintf('too many answer options across questions (%d > %d)', $total, $l->maxTotalOptions);
+        }
+
+        foreach ($states as $state) {
+            // laya-serve counts characters: a string as is, anything else as its JSON with unescaped unicode.
+            // ponytail: PHP's JSON has no spaces after , and :, so structured states measure a little short
+            $length = mb_strlen(is_string($state) ? $state : json_encode($state, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            if ($over($length, $l->maxStateLength)) {
+                return sprintf('state too large (%d > %d chars)', $length, $l->maxStateLength);
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -278,9 +331,9 @@ final class FakeHttpClient implements ClientInterface
     }
 
     /** @param array<string, mixed> $body */
-    private function json(array $body): ResponseInterface
+    private function json(array $body, int $status = 200): ResponseInterface
     {
-        return Psr17FactoryDiscovery::findResponseFactory()->createResponse()
+        return Psr17FactoryDiscovery::findResponseFactory()->createResponse($status)
             ->withHeader('Content-Type', 'application/json')
             ->withBody(Psr17FactoryDiscovery::findStreamFactory()->createStream(json_encode($body, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION)));
     }

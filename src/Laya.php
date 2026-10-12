@@ -19,6 +19,7 @@ use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Exceptions\TransportException;
 use MarcReichel\Laya\Exceptions\ValidationException;
 use MarcReichel\Laya\Testing\FakeHttpClient;
+use MarcReichel\Laya\Testing\Limits;
 use PHPUnit\Framework\Assert;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientExceptionInterface;
@@ -37,9 +38,6 @@ use Psr\SimpleCache\CacheInterface;
  */
 final class Laya
 {
-    /** laya-serve refuses batches of more states (MAX_BATCH_STATES). Pest can't cover a constant; the chunking test pins it. */
-    private const int BATCH_SIZE = 64; // @pest-mutate-ignore
-
     /**
      * Sent when no Model is pinned. TypeSafe's spec requires a model name; laya-serve routes by language for any
      * name it doesn't know, and sys1 accepts this alias for whatever it serves.
@@ -53,6 +51,9 @@ final class Laya
 
     private readonly string $baseUrl;
 
+    /** @var int<1, max> */
+    private readonly int $batchSize;
+
     private readonly ClientInterface $http;
 
     private readonly RequestFactoryInterface $requestFactory;
@@ -65,6 +66,7 @@ final class Laya
      * @param  int|\DateInterval|null  $cacheTtl  null keeps entries as long as the cache does
      * @param  EventDispatcherInterface|null  $events  receives a PredictionMade or PredictionFailed for every prediction, and a CacheFailed when the cache fails
      * @param  bool  $includeState  put the state on the events; off by default, since states may be sensitive
+     * @param  int  $batchSize  states per batch request; laya-serve refuses more than its MAX_BATCH_STATES (64 by default)
      */
     public function __construct(
         string $baseUrl = 'http://localhost:8000',
@@ -76,7 +78,10 @@ final class Laya
         private readonly int|\DateInterval|null $cacheTtl = null,
         private readonly ?EventDispatcherInterface $events = null,
         private readonly bool $includeState = false,
+        int $batchSize = 64,
     ) {
+        $batchSize >= 1 || throw new InvalidOptionException(sprintf('batchSize must be at least 1, got %d.', $batchSize));
+        $this->batchSize = $batchSize;
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->http = $httpClient ?? Psr18ClientDiscovery::find();
         $this->requestFactory = $requestFactory ?? Psr17FactoryDiscovery::findRequestFactory();
@@ -106,15 +111,16 @@ final class Laya
      *
      * @param  array<string, string|int|float|bool|\BackedEnum|list<string|int|\BackedEnum>|null>|object  $answers
      * @param  bool|null  $includeState  null takes the container's setting, or false
+     * @param  Limits  $limits  what the fake refuses with a ValidationException, like laya-serve does; defaults to its limits, Limits::none() to accept anything
      */
-    public static function fake(array|object $answers = [], ?EventDispatcherInterface $events = null, ?bool $includeState = null): self
+    public static function fake(array|object $answers = [], ?EventDispatcherInterface $events = null, ?bool $includeState = null, Limits $limits = new Limits): self
     {
         $bound = class_exists(Container::class) && Container::getInstance()->bound(self::class);
         /** @var self|null $current */
         $current = $bound ? Container::getInstance()->make(self::class) : null;
         $fake = new self(
             'http://laya.test',
-            httpClient: new FakeHttpClient($answers),
+            httpClient: new FakeHttpClient($answers, $limits),
             events: $events ?? $current?->events,
             includeState: $includeState ?? $current->includeState ?? false,
         );
@@ -232,7 +238,7 @@ final class Laya
         }
 
         // Identical states share a key, so each distinct one is sent once and its answer goes to every copy.
-        foreach (array_chunk(array_unique($misses), self::BATCH_SIZE, preserve_keys: true) as $chunk) {
+        foreach (array_chunk(array_unique($misses), $this->batchSize, preserve_keys: true) as $chunk) {
             // ponytail: scans all misses per chunk, O(n²/64); group the ids by chunk up front if batches reach tens of thousands
             $copies = array_intersect($misses, $chunk);
             // The batch endpoint takes the same controls as a single prediction and applies them to every state.
@@ -281,7 +287,13 @@ final class Laya
      */
     public function decide(string|array|\JsonSerializable $state, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): object
     {
-        return DecisionMapper::hydrate($class, $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence));
+        try {
+            $result = $this->predict($state, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence);
+        } catch (ValidationException $e) {
+            throw self::named($e, $class);
+        }
+
+        return DecisionMapper::hydrate($class, $result);
     }
 
     /**
@@ -299,7 +311,19 @@ final class Laya
      */
     public function decideMany(array $states, string $class, ?Model $model = null, ?int $maxLen = null, ?int $headMaxLen = null, float|array|null $minConfidence = null): array
     {
-        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $this->predictMany($states, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence));
+        try {
+            $results = $this->predictMany($states, DecisionMapper::questions($class), $model, $maxLen, $headMaxLen, $minConfidence);
+        } catch (ValidationException $e) {
+            throw self::named($e, $class);
+        }
+
+        return array_map(fn (Result $result) => DecisionMapper::hydrate($class, $result), $results);
+    }
+
+    /** The server's rejection, prefixed with the decision class that asked. */
+    private static function named(ValidationException $e, string $class): ValidationException
+    {
+        return new ValidationException(sprintf('%s: %s', $class, $e->getMessage()), $e->status, $e);
     }
 
     public function health(): HealthStatus
