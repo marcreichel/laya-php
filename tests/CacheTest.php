@@ -2,10 +2,16 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Psr7\Response;
 use MarcReichel\Laya\Events\CacheFailed;
 use MarcReichel\Laya\Events\PredictionMade;
 use MarcReichel\Laya\Exceptions\ServerException;
+use MarcReichel\Laya\Laya;
+use MarcReichel\Laya\Question;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 use Psr\SimpleCache\CacheInterface;
 
 /** A PSR-16 cache whose reads and writes throw $error when told to. */
@@ -217,4 +223,123 @@ it('drops the exception of a CacheFailed listener', function () {
 it('lets an Error from the cache surface', function () {
     expect(fn () => layaBatching(cache: new FailingCache(getError: new TypeError('a bug')))->predict('x', questions()))->toThrow(TypeError::class, 'a bug')
         ->and(fn () => layaBatching(cache: new FailingCache(setError: new TypeError('a bug')))->predict('x', questions()))->toThrow(TypeError::class, 'a bug');
+});
+
+/**
+ * A Laya whose /health answers with $health (an array, or an int status for a failure) and whose predictions answer LAYA_RESPONSE.
+ *
+ * @param  array<string, mixed>|int  $health
+ * @param  list<RequestInterface>  $sent
+ */
+function layaVersioned(CacheInterface $cache, array|int $health, array &$sent = [], bool $versionCache = true, ?RecordingDispatcher $events = null, bool $noCache = false): Laya
+{
+    $client = new class($health, $sent) implements ClientInterface
+    {
+        /** @param list<RequestInterface> $sent */
+        public function __construct(private array|int $health, private array &$sent) {}
+
+        public function sendRequest(RequestInterface $request): ResponseInterface
+        {
+            $this->sent[] = $request;
+            if ($request->getMethod() === 'GET') {
+                return is_int($this->health) ? new Response($this->health, [], '{}') : new Response(200, [], json_encode($this->health));
+            }
+            $body = json_decode((string) $request->getBody(), true);
+            $results = array_map(fn ($state) => LAYA_RESPONSE, $body['states'] ?? [$body['state']]);
+
+            return new Response(200, [], json_encode(isset($body['states']) ? ['results' => $results] : $results[0]));
+        }
+    };
+
+    return new Laya('http://laya.local', httpClient: $client, cache: $noCache ? null : $cache, events: $events, versionCache: $versionCache);
+}
+
+function ask(Laya $laya): void
+{
+    $laya->predict('a ticket', ['q' => Question::choice('Q?', ['a', 'b'])]);
+}
+
+/** @param list<RequestInterface> $sent */
+function healthRequests(array $sent): int
+{
+    return count(array_filter($sent, fn (RequestInterface $r) => $r->getMethod() === 'GET'));
+}
+
+it('keeps the plain keys and never calls /health by default', function () {
+    $cache = new FailingCache;
+    $sent = [];
+    ask(layaVersioned($cache, ['status' => 'ok', 'revisions' => ['m' => 'abc']], $sent, versionCache: false));
+
+    expect(array_keys($cache->items))->toHaveCount(1)
+        ->and(array_keys($cache->items)[0])->toMatch('/^laya\.[0-9a-f]{32}$/')
+        ->and(healthRequests($sent))->toBe(0);
+});
+
+it('does not call /health without a cache', function () {
+    $sent = [];
+    $laya = layaVersioned(new FailingCache, ['status' => 'ok'], $sent, noCache: true);
+    ask($laya);
+
+    expect(healthRequests($sent))->toBe(0);
+});
+
+it('puts the revisions into the key, so changed revisions mean new keys and the same ones the same keys', function () {
+    $keys = [];
+    foreach ([['m' => 'abc', 'n' => null], ['n' => null, 'm' => 'abc'], ['m' => 'def', 'n' => null]] as $revisions) {
+        $cache = new FailingCache;
+        ask(layaVersioned($cache, ['status' => 'ok', 'revisions' => $revisions]));
+        $keys[] = array_keys($cache->items)[1]; // [0] is the cached revision hash
+    }
+
+    expect($keys[0])->toMatch('/^laya\.[0-9a-f]{32}\.[0-9a-f]{32}$/')
+        ->and($keys[1])->toBe($keys[0])
+        ->and($keys[2])->not->toBe($keys[0]);
+});
+
+it('asks /health once per instance, and shares the revision hash through the cache', function () {
+    $cache = new FailingCache;
+    $sent = [];
+    $laya = layaVersioned($cache, ['status' => 'ok', 'revisions' => ['m' => 'abc']], $sent);
+    ask($laya);
+    ask($laya);
+    $other = [];
+    ask(layaVersioned($cache, 503, $other));
+
+    expect(healthRequests($sent))->toBe(1)
+        ->and(healthRequests($other))->toBe(0)
+        ->and(array_keys($cache->items))->toHaveCount(2);
+});
+
+it('falls back to the plain key when /health fails or reports no revisions', function (array|int $health) {
+    $cache = new FailingCache;
+    $sent = [];
+    $laya = layaVersioned($cache, $health, $sent);
+    ask($laya);
+    ask($laya);
+
+    expect(array_keys($cache->items)[0])->toMatch('/^laya\.[0-9a-f]{32}$/')
+        ->and($cache->items)->toHaveCount(1)
+        ->and(healthRequests($sent))->toBe(1);
+})->with([
+    'health fails' => [503],
+    'sys1, no revisions' => [['status' => 'ok']],
+]);
+
+it('versions the keys of predictMany() too', function () {
+    $cache = new FailingCache;
+    layaVersioned($cache, ['status' => 'ok', 'revisions' => ['m' => 'abc']])
+        ->predictMany(['a', 'b'], ['q' => Question::choice('Q?', ['a', 'b'])]);
+
+    expect(array_keys($cache->items))->toHaveCount(3)
+        ->and(array_keys($cache->items)[1])->toMatch('/^laya\.[0-9a-f]{32}\.[0-9a-f]{32}$/');
+});
+
+it('reports a cache that fails on the revision hash, and still predicts', function () {
+    $events = new RecordingDispatcher;
+    $sent = [];
+    $cache = new FailingCache(new RuntimeException('down'), new RuntimeException('down'));
+    ask(layaVersioned($cache, ['status' => 'ok', 'revisions' => ['m' => 'abc']], $sent, events: $events));
+
+    expect(array_map(fn (CacheFailed $e) => $e->operation, cacheFailures($events)))->toBe(['get', 'set', 'get', 'set'])
+        ->and(healthRequests($sent))->toBe(1);
 });

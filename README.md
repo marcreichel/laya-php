@@ -57,6 +57,7 @@ LAYA_TIMEOUT=       # seconds; needs symfony/http-client (see below)
 LAYA_RETRIES=       # retries on 503 and transport errors, with backoff
 LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
+LAYA_CACHE_VERSIONED=false        # add the checkpoint revisions to the cache keys (see Caching)
 LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed/CacheFailed (see Events)
 LAYA_EVENTS_INCLUDE_STATE=false
 ```
@@ -588,7 +589,13 @@ Laya gives the same answer to the same input, so you can skip repeat requests wi
 $laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400);
 ```
 
-The key doesn't include the checkpoint revision, so clear the cache (or set a TTL) when you upgrade `laya-serve`'s checkpoints.
+By default the key doesn't include the checkpoint revision, so clear the cache (or set a TTL) when you upgrade `laya-serve`'s checkpoints. Or let Laya do it:
+
+```php
+$laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400, versionCache: true);
+```
+
+With `versionCache`, the first lookup per instance calls `/health` once and puts the checkpoint revisions into the key (`laya.<revisionhash>.<bodyhash>`). The hash is also kept in the cache for 60 seconds, so short-lived PHP-FPM requests don't each call `/health`. A changed revision means new keys; the old entries are never hit again and expire through the TTL. If `/health` fails or reports no revisions (sys1), Laya uses the plain key and the prediction goes ahead. It's off by default, since turning it on changes every key. In Laravel, set `LAYA_CACHE_VERSIONED=true`.
 
 The cache is best-effort: it never fails a prediction. If reading it throws (say, Redis is unreachable), or an entry isn't a laya response, Laya asks `laya-serve` and overwrites the entry with the answer. If writing it throws, you get the result anyway, uncached; in a batch, every state still gets its result. Only exceptions are caught, so an `Error` still surfaces. With an event dispatcher, each failure dispatches a `CacheFailed` (see Events); without one, failures are silent.
 

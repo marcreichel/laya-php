@@ -97,6 +97,17 @@ it('caches predictions in the configured store for the configured ttl', function
         ->and((fn () => $this->cacheTtl)->call($laya))->toBe(60);
 });
 
+it('versions the cache keys only when asked to', function () {
+    $versioned = fn () => (fn () => $this->versionCache)->call(app(Laya::class));
+
+    expect($versioned())->toBeFalse();
+
+    app()->forgetInstance(Laya::class);
+    config(['laya.cache.versioned' => 'true']);
+
+    expect($versioned())->toBeTrue();
+});
+
 it('does not cache by default, or with an empty store', function () {
     config(['laya.cache.store' => '']);
     $laya = app(Laya::class);
