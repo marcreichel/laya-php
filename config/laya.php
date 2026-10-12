@@ -19,6 +19,9 @@ return [
     // Binding Psr\Http\Client\ClientInterface in the container works too.
     'http_client' => null,
 
+    // States per batch request. laya-serve refuses batches over its MAX_BATCH_STATES (64 by default).
+    'batch_size' => (int) env('LAYA_BATCH_SIZE', 64),
+
     // A cache store (e.g. "redis") to remember predictions in; null disables caching.
     // Clear it, or set a TTL, when you upgrade laya-serve's checkpoints.
     'cache' => [

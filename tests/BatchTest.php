@@ -6,6 +6,7 @@ use GuzzleHttp\Psr7\Response;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
 use MarcReichel\Laya\Attributes\Ask;
+use MarcReichel\Laya\Exceptions\InvalidOptionException;
 use MarcReichel\Laya\Exceptions\ServerException;
 use MarcReichel\Laya\Exceptions\ValidationException;
 use MarcReichel\Laya\Laya;
@@ -56,6 +57,16 @@ it('sends the token budgets for every state and caches them apart from unbudgete
         ->and($body['max_len'])->toBe(2048)
         ->and($body['head_max_len'])->toBe(64)
         ->and(json_decode((string) $sent[0]->getBody(), true))->not->toHaveKeys(['max_len', 'head_max_len']);
+});
+
+it('batches by the configured size, and rejects a size below one', function () {
+    $sent = [];
+    $laya = new Laya('http://laya.local', httpClient: (fn () => $this->http)->call(layaBatching($sent)), batchSize: 2);
+    $laya->predictMany(['a', 'b', 'c'], questions());
+
+    expect(array_map(fn ($r) => count(json_decode((string) $r->getBody(), true)['states']), $sent))->toBe([2, 1])
+        ->and((new Laya(batchSize: 1))->predictMany([], questions()))->toBe([])
+        ->and(fn () => new Laya(batchSize: 0))->toThrow(InvalidOptionException::class, 'batchSize must be at least 1, got 0.');
 });
 
 it('sends nothing for no states', function () {

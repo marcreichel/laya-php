@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Psr7\Request;
 use Illuminate\Container\Container;
 use MarcReichel\Laya\Attributes\Ask;
+use MarcReichel\Laya\Exceptions\ValidationException;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Model;
 use MarcReichel\Laya\Question;
+use MarcReichel\Laya\Result;
+use MarcReichel\Laya\Testing\Limits;
 use PHPUnit\Framework\AssertionFailedError;
 
 enum Desk: string
@@ -202,4 +206,67 @@ it('asserts decisions that were not made, and how many were', function () {
         ->and(fn () => $laya->assertNotDecided(Routing::class, fn ($state, $model) => $state === 'c' && $model === null))->not->toThrow(AssertionFailedError::class)
         ->and(fn () => $laya->assertNotDecided(Routing::class, fn ($state, $model) => $state === 'a' && $model === null))->toThrow(AssertionFailedError::class, 'Expected Routing not to be decided, but it was decided 1 time(s).')
         ->and(fn () => $laya->assertNotDecided(Routing::class))->toThrow(AssertionFailedError::class, 'decided 2 time(s)');
+});
+
+it('refuses what laya-serve refuses, in its words', function (array $questions, mixed $state, string $message) {
+    expect(fn () => Laya::fake()->predict($state, $questions))
+        ->toThrow(ValidationException::class, "laya-serve: $message (HTTP 413)");
+})->with([
+    'questions' => [array_map(fn () => Question::yesNo('?'), array_flip(array_map(fn ($i) => "q$i", range(1, 65)))), 'x', 'too many questions (65 > 64)'],
+    'choice options' => [['q' => Question::choice('?', array_map(strval(...), range(1, 101)))], 'x', "too many choice options for 'q' (101 > 100)"],
+    'score levels' => [['q' => Question::score('?', array_map(strval(...), range(1, 33)))], 'x', "too many score levels for 'q' (33 > 32)"],
+    'total options' => [array_map(fn () => Question::choice('?', array_map(strval(...), range(1, 60))), array_flip(array_map(fn ($i) => "q$i", range(1, 9)))), 'x', 'too many answer options across questions (540 > 512)'],
+    'string state' => [['q' => Question::yesNo('?')], str_repeat('é', 50_001), 'state too large (50001 > 50000 chars)'],
+    'array state' => [['q' => Question::yesNo('?')], ['body' => str_repeat('x', 50_000)], 'state too large (50011 > 50000 chars)'],
+]);
+
+it('refuses a batch over the limit, and accepts one at it', function () {
+    $q = ['q' => Question::yesNo('?')];
+    $laya = Laya::fake(['q' => true], limits: new Limits(maxBatchSize: 2));
+    $client = (fn () => $this->http)->call($laya);
+    $post = fn (int $n) => $client->sendRequest(new Request('POST', 'http://laya.test/v1/systemone/batch', [], json_encode(['states' => array_fill(0, $n, 's'), 'questions' => ['q' => ['type' => 'yesno', 'prompt' => '?']]])));
+
+    expect($post(2)->getStatusCode())->toBe(200)
+        ->and($post(3)->getStatusCode())->toBe(413)
+        ->and((string) $post(3)->getBody())->toContain('too many states in batch (3 > 2)');
+});
+
+it('takes custom limits, and none', function () {
+    $q = ['q' => Question::yesNo('?')];
+
+    expect(fn () => Laya::fake(['q' => true], limits: new Limits(maxStateLength: 3))->predict('four', $q))->toThrow(ValidationException::class, 'state too large (4 > 3 chars)');
+    expect(Laya::fake(['q' => true], limits: new Limits(maxStateLength: null, maxQuestions: null, maxChoiceOptions: null, maxScoreLevels: null, maxTotalOptions: null, maxBatchSize: null))->predict(str_repeat('x', 60_000), $q))->toBeInstanceOf(Result::class);
+    expect(Laya::fake(['q' => true], limits: Limits::none())->predict(str_repeat('x', 60_000), $q))->toBeInstanceOf(Result::class);
+});
+
+it('names the decision class in the refusal', function () {
+    $laya = Laya::fake(['desk' => 'billing', 'churn' => true], limits: new Limits(maxStateLength: 3));
+
+    expect(fn () => $laya->decide('four', Routing::class))->toThrow(ValidationException::class, Routing::class.': laya-serve: state too large (4 > 3 chars) (HTTP 413)')
+        ->and(fn () => $laya->decideMany(['four'], Routing::class))->toThrow(ValidationException::class, Routing::class.': laya-serve: state too large');
+});
+
+it('measures a structured state by its JSON, unicode and slashes unescaped', function () {
+    $q = ['q' => Question::yesNo('?')];
+
+    expect(Laya::fake(['q' => true], limits: new Limits(maxStateLength: 11))->predict(['a' => 'é/é'], $q))->toBeInstanceOf(Result::class)
+        ->and(fn () => Laya::fake(['q' => true], limits: new Limits(maxStateLength: 10))->predict(['a' => 'é/é'], $q))->toThrow(ValidationException::class, 'state too large (11 > 10 chars)');
+});
+
+it('only counts the options of choice and score questions', function () {
+    $laya = Laya::fake(['q' => true]);
+    $client = (fn () => $this->http)->call($laya);
+    $post = fn (array $questions) => $client->sendRequest(new Request('POST', 'http://laya.test/v1/systemone', [], json_encode(['state' => 's', 'questions' => $questions])));
+    $options = array_map(strval(...), range(1, 101));
+
+    expect($post(['q' => ['type' => 'yesno', 'prompt' => '?', 'criteria' => $options]])->getStatusCode())->toBe(200)
+        ->and($post(['q' => ['type' => 'yesno', 'prompt' => '?'], 'c' => ['type' => 'choice', 'prompt' => '?', 'criteria' => $options]])->getStatusCode())->toBe(413);
+});
+
+it('accepts a batch of 64 by default and refuses 65', function () {
+    $laya = Laya::fake(['q' => true]);
+    $client = (fn () => $this->http)->call($laya);
+    $post = fn (int $n) => $client->sendRequest(new Request('POST', 'http://laya.test/v1/systemone/batch', [], json_encode(['states' => array_fill(0, $n, 's'), 'questions' => ['q' => ['type' => 'yesno', 'prompt' => '?']]])))->getStatusCode();
+
+    expect($post(64))->toBe(200)->and($post(65))->toBe(413);
 });

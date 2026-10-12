@@ -39,6 +39,14 @@ it('resolves a configured singleton', function () {
     expect($url)->toBe('http://laya.internal:8000')->and($apiKey)->toBe('secret');
 });
 
+it('batches by the configured size', function () {
+    expect(config('laya.batch_size'))->toBe(64);
+
+    config(['laya.batch_size' => 8]);
+
+    expect((fn () => $this->batchSize)->call(app(Laya::class)))->toBe(8);
+});
+
 it('treats an empty api key as none', function () {
     config(['laya.api_key' => '']);
 
