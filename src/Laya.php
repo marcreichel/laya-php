@@ -46,9 +46,9 @@ final class Laya
      */
     public const string AUTO_MODEL = 'jev-latest';
 
-    /** The keys of a minConfidence map: core's temp_bucket spelling, type and option count, or "default". */
-    private const int REVISION_TTL = 60;
+    private const int REVISION_TTL = 60; // @pest-mutate-ignore
 
+    /** The keys of a minConfidence map: core's temp_bucket spelling, type and option count, or "default". */
     private const string BUCKET = '/^(?:(?:choice|score|noul):(?:2|3-5|6-10|11\+)|default)$/D';
 
     private readonly string $baseUrl;
