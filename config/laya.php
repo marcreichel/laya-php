@@ -23,10 +23,11 @@ return [
     'batch_size' => (int) env('LAYA_BATCH_SIZE', 64),
 
     // A cache store (e.g. "redis") to remember predictions in; null disables caching.
-    // Clear it, or set a TTL, when you upgrade laya-serve's checkpoints.
+    // Clear it, set a TTL, or turn on versioned when you upgrade laya-serve's checkpoints.
     'cache' => [
         'store' => env('LAYA_CACHE_STORE'),
         'ttl' => env('LAYA_CACHE_TTL'), // seconds; null keeps entries as long as the store does
+        'versioned' => env('LAYA_CACHE_VERSIONED', false), // add laya-serve's checkpoint revisions to the keys; costs a /health request
     ],
 
     // Dispatch PredictionMade, PredictionFailed and CacheFailed through the app's event dispatcher.

@@ -46,6 +46,8 @@ final class Laya
      */
     public const string AUTO_MODEL = 'jev-latest';
 
+    private const int REVISION_TTL = 60; // @pest-mutate-ignore
+
     /** The keys of a minConfidence map: core's temp_bucket spelling, type and option count, or "default". */
     private const string BUCKET = '/^(?:(?:choice|score|noul):(?:2|3-5|6-10|11\+)|default)$/D';
 
@@ -60,6 +62,8 @@ final class Laya
 
     private readonly StreamFactoryInterface $streamFactory;
 
+    private ?string $keyPrefix = null;
+
     /**
      * @param  ClientInterface|null  $httpClient  any PSR-18 client; discovered when omitted
      * @param  CacheInterface|null  $cache  caches predictions by state, questions and model; laya is deterministic. Best-effort: its exceptions never fail a prediction
@@ -67,6 +71,7 @@ final class Laya
      * @param  EventDispatcherInterface|null  $events  receives a PredictionMade or PredictionFailed for every prediction, and a CacheFailed when the cache fails
      * @param  bool  $includeState  put the state on the events; off by default, since states may be sensitive
      * @param  int  $batchSize  states per batch request; laya-serve refuses more than its MAX_BATCH_STATES (64 by default)
+     * @param  bool  $versionCache  add laya-serve's checkpoint revisions to the cache keys, so a checkpoint upgrade stops serving old answers. Costs one /health request per instance (or per minute, through the cache); off by default, and changes every key
      */
     public function __construct(
         string $baseUrl = 'http://localhost:8000',
@@ -79,6 +84,7 @@ final class Laya
         private readonly ?EventDispatcherInterface $events = null,
         private readonly bool $includeState = false,
         int $batchSize = 64,
+        private readonly bool $versionCache = false,
     ) {
         $batchSize >= 1 || throw new InvalidOptionException(sprintf('batchSize must be at least 1, got %d.', $batchSize));
         $this->batchSize = $batchSize;
@@ -178,7 +184,7 @@ final class Laya
     {
         self::assertMinConfidence($minConfidence);
         $json = self::json($this->body(['state' => $state], self::wire($questions), $model, $maxLen, $headMaxLen, $minConfidence));
-        $key = self::cacheKey($json);
+        $key = $this->cacheKey($json);
         $cached = $this->cached($key);
         if ($cached !== null) {
             $this->events?->dispatch($this->made($state, $questions, $model, $cached, true, 0.0));
@@ -228,7 +234,7 @@ final class Laya
         $results = [];
         $misses = [];
         foreach ($states as $id => $state) {
-            $key = self::cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen, $minConfidence)));
+            $key = $this->cacheKey(self::json($this->body(['state' => $state], $wire, $model, $maxLen, $headMaxLen, $minConfidence)));
             // Misses stay null, placeholders that keep the input order for the answers filled in below.
             $results[$id] = $this->cached($key);
             if ($results[$id] !== null) {
@@ -630,10 +636,53 @@ final class Laya
         return json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     }
 
-    // The key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
-    private static function cacheKey(string $json): string
+    private function cacheKey(string $json): string
     {
-        return 'laya.'.hash('xxh128', $json);
+        return $this->keyPrefix().hash('xxh128', $json);
+    }
+
+    // Without versionCache the key ignores the checkpoint revision; set a cacheTtl or clear the cache after upgrading laya.
+    private function keyPrefix(): string
+    {
+        if (! $this->versionCache || $this->cache === null) {
+            return 'laya.';
+        }
+
+        return $this->keyPrefix ??= $this->revisionPrefix($this->cache);
+    }
+
+    /**
+     * 'laya.<revisionhash>.', or the plain prefix when /health fails or reports no revisions. The hash lives in the
+     * cache for a minute, so short-lived processes don't each ask /health; a failed lookup isn't stored, the next process retries.
+     */
+    private function revisionPrefix(CacheInterface $cache): string
+    {
+        $cacheKey = 'laya.revisions.'.hash('xxh128', $this->baseUrl);
+        try {
+            $hash = $cache->get($cacheKey);
+        } catch (\Exception $e) {
+            $this->cacheFailed('get', $cacheKey, $e);
+            $hash = null;
+        }
+        if (! is_string($hash)) {
+            try {
+                $revisions = $this->health()->revisions;
+            } catch (LayaException) {
+                return 'laya.';
+            }
+            if ($revisions === []) {
+                return 'laya.';
+            }
+            ksort($revisions);
+            $hash = hash('xxh128', self::json($revisions));
+            try {
+                $cache->set($cacheKey, $hash, self::REVISION_TTL);
+            } catch (\Exception $e) {
+                $this->cacheFailed('set', $cacheKey, $e);
+            }
+        }
+
+        return 'laya.'.$hash.'.';
     }
 
     private function post(string $path, string $json): RequestInterface
