@@ -53,11 +53,15 @@ For Laravel 13+, the service provider is auto-discovered. It registers `Laya` as
 ```dotenv
 LAYA_URL=http://localhost:8000
 LAYA_API_KEY=
+LAYA_TIMEOUT=       # seconds; needs symfony/http-client (see below)
+LAYA_RETRIES=       # retries on 503 and transport errors, with backoff
 LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
 LAYA_EVENTS=true                  # dispatch PredictionMade/PredictionFailed/CacheFailed (see Events)
 LAYA_EVENTS_INCLUDE_STATE=false
 ```
+
+`LAYA_TIMEOUT` and `LAYA_RETRIES` build the HTTP client with `symfony/http-client` (`composer require symfony/http-client`); setting either without it throws. To use your own client instead, bind `Psr\Http\Client\ClientInterface` in the container or put a service id in `laya.http_client`; it wins over both settings. With none of these set, the SDK discovers a PSR-18 client as before.
 
 `php artisan laya:health` prints the server's status and loaded checkpoints (plus the idle-unload window and idle time when laya-serve runs with `LAYA_IDLE_UNLOAD_SECONDS`, since an idle unload leaves "Loaded: none" on a healthy server), and exits with 1 when it is unreachable or unhealthy, so you can use it in deploy checks.
 
@@ -224,7 +228,7 @@ $results[42]->choice('department');
 $triages = $laya->decideMany($tickets->pluck('body', 'id')->all(), Triage::class, maxLen: 4096);
 ```
 
-Cached states aren't sent again, identical states in one call are sent once and share the result, and the rest go out in requests of at most 64 distinct states. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. `maxLen` and `headMaxLen` apply to every state in the batch and need laya-serve 0.3.23; older servers ignore them. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
+Cached states aren't sent again, identical states in one call are sent once and share the result, and the rest go out in requests of at most 64 distinct states. Pass `batchSize:` to `new Laya()` (Laravel: `batch_size` in the config, or `LAYA_BATCH_SIZE`) if your server's batch limit differs; a size below 1 throws an `InvalidOptionException`. One state that laya-serve rejects fails the whole request, the same way `predict()` throws. `maxLen` and `headMaxLen` apply to every state in the batch and need laya-serve 0.3.23; older servers ignore them. A laya-serve older than 0.3.22 answers with a `ServerException` that names the version it needs.
 
 Both methods are experimental and may change in a minor release.
 
@@ -371,7 +375,24 @@ if ($triage->department === null) {
 | `yes`, `no` | `bool`, `float` without `#[Levels]` | describe what yes and no mean |
 | `threshold` | `bool`, `array` with `#[Of]` | `true`, or the case is listed, when P(yes) ≥ threshold (default 0.5) |
 
-For the full probabilities, use `predict()`.
+### Keeping the probabilities
+
+`decideWithResult()` returns the instance and the raw `Result` it was read from, for logging, auditing or tuning `minConfidence` and `threshold`:
+
+```php
+$decision = $laya->decideWithResult($ticket, Triage::class);
+
+$decision->value;                                         // Triage
+$decision->result->choice('department')->probabilities;
+$decision->result->choice('department')->answerConfidence;
+$decision->result->truncated;
+
+$decisions = $laya->decideManyWithResult($tickets->pluck('body', 'id')->all(), Triage::class);
+$decisions[42]->value;
+$decisions[42]->result;
+```
+
+`decideManyWithResult()` is experimental like `decideMany()` and keeps the keys of the states.
 
 ## Recipes
 
@@ -567,7 +588,7 @@ Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`
 | `ServerException` | any other error status, or a response that isn't laya-shaped or doesn't fit the decision class (a missing answer, another answer type, a label that isn't an enum case) |
 | `TransportException` | laya-serve couldn't be reached |
 
-The SDK doesn't retry. For retries, pass an HTTP client that has them, such as Symfony's `RetryableHttpClient` or Guzzle with retry middleware:
+The SDK doesn't retry. In Laravel, set `LAYA_RETRIES` (see Laravel above). Elsewhere, pass an HTTP client that has them, such as Symfony's `RetryableHttpClient` or Guzzle with retry middleware:
 
 ```php
 use Symfony\Component\HttpClient\{HttpClient, Psr18Client, RetryableHttpClient};
@@ -639,10 +660,16 @@ The fake reports the model you pin as `routedModel`. Without one it reports `'mu
 
 If code asks a question you didn't register, or gives an answer that isn't one of the question's options, the fake throws.
 
+The fake also refuses what laya-serve would, with a `ValidationException` that names the limit and the count: too many questions, choice options, score levels, options in total, too long a state, or too many states in a batch. Its defaults are laya-serve's. Pass `limits:` to match a server you configured differently, or `Limits::none()` to accept anything:
+
+```php
+$laya = Laya::fake($answers, limits: new Limits(maxStateLength: 10_000, maxBatchSize: 16));
+```
+
 ## Limitations
 
 - **One inference at a time.** `laya-serve` handles one request at a time, so parallel requests just wait in line. For many states, use [`predictMany()`](#batches-experimental), which shares forward passes.
-- **Server limits.** `laya-serve` caps requests at 64 states per batch, 64 questions, 50,000 characters of state, 100 choice options, 32 score levels and 512 answer options in total.
+- **Server limits.** `laya-serve` enforces its own limits (by default 64 states per batch, 64 questions, 50,000 characters of state, 100 choice options, 32 score levels and 512 answer options in total) and answers a request over them with a `ValidationException`; `decide()` and `decideMany()` put the decision class in its message. The client checks nothing itself. `Laya::fake()` mirrors the defaults, see [Testing your code](#testing-your-code).
 
 ## Development
 

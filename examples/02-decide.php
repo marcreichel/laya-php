@@ -52,3 +52,7 @@ foreach ($tickets as $ticket) {
 
     printf("%-10s urgency %d  churn %-3s  %s\n", $triage->department->value, $triage->urgency, $triage->churn ? 'yes' : 'no', $ticket);
 }
+
+$decision = $laya->decideWithResult($tickets[0], Triage::class);
+
+printf("%s, department confidence %.2f\n", $decision->value->department->value, $decision->result->choice('department')->answerConfidence);
