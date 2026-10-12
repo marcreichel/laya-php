@@ -140,7 +140,7 @@ final class TryCommand extends Command
 
     /**
      * @param  array<string, Question>  $questions
-     * @param  array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>  $values
+     * @param  array<string, bool|int|float|\BackedEnum|list<\BackedEnum>|null>  $values
      */
     private function render(array $questions, Result $result, array $values): void
     {
@@ -216,13 +216,13 @@ final class TryCommand extends Command
     /**
      * The value behind question $id. An #[Of] parameter's "topics.billing" reads whether its list holds billing.
      *
-     * @param  array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>  $values
+     * @param  array<string, bool|int|float|\BackedEnum|list<\BackedEnum>|null>  $values
      */
-    private static function value(array $values, string $id): bool|int|\BackedEnum|null
+    private static function value(array $values, string $id): bool|int|float|\BackedEnum|null
     {
         // Parameter names can't hold a dot, so a dotted id is an #[Of] parameter's case question.
         if (! str_contains($id, '.')) {
-            /** @var bool|int|\BackedEnum|null $value */
+            /** @var bool|int|float|\BackedEnum|null $value */
             $value = $values[$id];
 
             return $value;
@@ -235,7 +235,7 @@ final class TryCommand extends Command
         return $cases === null ? null : in_array($case, array_map(fn (\BackedEnum $c) => (string) $c->value, $cases), true);
     }
 
-    private static function display(bool|int|\BackedEnum|null $value): string
+    private static function display(bool|int|float|\BackedEnum|null $value): string
     {
         if ($value instanceof \BackedEnum) {
             return new \ReflectionClass($value)->getShortName().'::'.$value->name;
@@ -252,7 +252,7 @@ final class TryCommand extends Command
     /**
      * @param  class-string  $class
      * @param  array<string, Question>  $questions
-     * @param  array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>  $values
+     * @param  array<string, bool|int|float|\BackedEnum|list<\BackedEnum>|null>  $values
      */
     private static function json(string $class, array $questions, Result $result, array $values): string
     {

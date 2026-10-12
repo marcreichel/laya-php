@@ -20,7 +20,8 @@ use MarcReichel\Laya\Exceptions\ServerException;
  * Turns a decision class's constructor into questions, and a Result back into an instance.
  *
  * Mapping: backed enum => choice, #[Scale] backed enum => score, bool => yes/no, int + #[Levels] => score,
- * array + #[Of(Enum::class)] => one yes/no per case, with ids such as "topics.billing".
+ * array + #[Of(Enum::class)] => one yes/no per case, with ids such as "topics.billing",
+ * float => P(yes) of a yes/no, float + #[Levels] => the expected level of a score.
  * A nullable parameter with #[Ask(minConfidence: ...)] is null when laya is unsure.
  *
  * @internal
@@ -63,22 +64,23 @@ final class DecisionMapper
      * The constructor arguments hydrate() passes: parameter name => value, null where laya is unsure.
      *
      * @param  class-string  $class
-     * @return array<string, bool|int|\BackedEnum|list<\BackedEnum>|null>
+     * @return array<string, bool|int|float|\BackedEnum|list<\BackedEnum>|null>
      */
     public static function values(string $class, Result $result): array
     {
         $arguments = [];
-        foreach (self::entry($class)['parameters'] as ['name' => $name, 'type' => $type, 'ask' => $ask, 'scale' => $scale, 'of' => $of]) {
+        $entry = self::entry($class);
+        foreach ($entry['parameters'] as ['name' => $name, 'type' => $type, 'ask' => $ask, 'scale' => $scale, 'of' => $of]) {
             if ($of !== null) {
                 $arguments[$name] = self::cases($class, $name, $of, $ask, $result);
 
                 continue;
             }
             $subject = $class.'::$'.$name;
-            $answer = match ($scale ? 'int' : $type) {
-                'bool' => self::answer($subject, $name, $result, $result->yesNo(...), 'yes/no'),
-                'int' => self::answer($subject, $name, $result, $result->score(...), 'score'),
-                default => self::answer($subject, $name, $result, $result->choice(...), 'choice'),
+            $answer = match ($entry['questions'][$name]->type) {
+                QuestionType::YesNo => self::answer($subject, $name, $result, $result->yesNo(...), 'yes/no'),
+                QuestionType::Score => self::answer($subject, $name, $result, $result->score(...), 'score'),
+                QuestionType::Choice => self::answer($subject, $name, $result, $result->choice(...), 'choice'),
             };
             if ($ask->minConfidence !== null && $answer->answerConfidence < $ask->minConfidence) {
                 $arguments[$name] = null;
@@ -86,9 +88,9 @@ final class DecisionMapper
                 continue;
             }
             if ($answer instanceof YesNoAnswer) {
-                $arguments[$name] = $answer->yes($ask->threshold);
+                $arguments[$name] = $type === 'float' ? $answer->probability : $answer->yes($ask->threshold);
             } elseif ($answer instanceof ScoreAnswer) {
-                $arguments[$name] = $scale ? self::scaleCase($subject, $type, $answer->level()) : $answer->level();
+                $arguments[$name] = $type === 'float' ? $answer->score : ($scale ? self::scaleCase($subject, $type, $answer->level()) : $answer->level());
             } else {
                 $arguments[$name] = self::enumCase($subject, $type, $answer->choice);
             }
@@ -156,19 +158,20 @@ final class DecisionMapper
     private static function question(string $class, \ReflectionParameter $parameter, Ask $ask, string $type): Question
     {
         self::assertNullable($class, $parameter, $ask, $type);
+        $levels = self::attribute($parameter, Levels::class);
 
-        if ($type === 'bool') {
+        if ($type !== 'bool' && $ask->threshold !== 0.5) {
+            throw new InvalidQuestionException(sprintf('%s::$%s is neither a bool nor an array of enum cases, so #[Ask] can\'t take threshold.', $class, $parameter->getName()));
+        }
+
+        if ($type === 'bool' || ($type === 'float' && $levels === null)) {
             return Question::yesNo($ask->instructions, $ask->yes, $ask->no);
         }
 
         self::assertNoYesNo($class, $parameter, $ask);
 
-        if ($ask->threshold !== 0.5) {
-            throw new InvalidQuestionException(sprintf('%s::$%s is neither a bool nor an array of enum cases, so #[Ask] can\'t take threshold.', $class, $parameter->getName()));
-        }
-
         if (self::isScale($type)) {
-            if (self::attribute($parameter, Levels::class) !== null) {
+            if ($levels !== null) {
                 throw new InvalidQuestionException(sprintf('%s::$%s is a #[Scale] enum, so its cases are the levels; drop #[Levels].', $class, $parameter->getName()));
             }
             /** @var class-string<\BackedEnum> $type */
@@ -184,9 +187,8 @@ final class DecisionMapper
             return Question::score($ask->instructions, $levels);
         }
 
-        if ($type === 'int') {
-            $levels = self::attribute($parameter, Levels::class)
-                ?? throw new InvalidQuestionException(sprintf('%s::$%s is an int, so it needs #[Levels(...)] to become a score question.', $class, $parameter->getName()));
+        if ($type === 'int' || $type === 'float') {
+            $levels ??= throw new InvalidQuestionException(sprintf('%s::$%s is an int, so it needs #[Levels(...)] to become a score question.', $class, $parameter->getName()));
 
             return Question::score($ask->instructions, $levels->levels);
         }
@@ -203,7 +205,7 @@ final class DecisionMapper
         }
 
         throw new InvalidQuestionException(sprintf(
-            '%s::$%s has type %s; laya answers from a fixed option set, so use a backed enum (choice, or score with #[Scale]), bool (yes/no), int with #[Levels] (score) or array with #[Of] (yes/no per enum case).',
+            '%s::$%s has type %s; laya answers from a fixed option set, so use a backed enum (choice, or score with #[Scale]), bool (yes/no), int with #[Levels] (score), float (P(yes), or the expected level with #[Levels]) or array with #[Of] (yes/no per enum case).',
             $class, $parameter->getName(), $type,
         ));
     }

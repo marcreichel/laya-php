@@ -270,6 +270,8 @@ $triage = $laya->decide($ticketText, Triage::class); // Triage
 | backed enum | choice (case values are the options; `#[Describe]` adds descriptions) | the most likely case |
 | `bool` | yes/no | `true` when P(yes) ≥ 0.5 |
 | `int` with `#[Levels(...)]` | score | the most likely level index |
+| `float` with `#[Levels(...)]` | score | the expected level, e.g. `1.74` |
+| `float` | yes/no | P(yes), 0.0 to 1.0 |
 | backed enum marked `#[Scale]` | score (cases are the levels, lowest first; `#[Describe]` text or the value) | the case at the most likely level |
 | `array` with `#[Of(Enum::class)]` | one yes/no per case of a backed enum | the cases with P(yes) ≥ 0.5, in declaration order |
 
@@ -366,7 +368,7 @@ if ($triage->department === null) {
 | Option | Applies to | Effect |
 |---|---|---|
 | `minConfidence` | any nullable parameter | `null` when `answerConfidence` is below it (for `?array` with `#[Of]`: when any case's is) |
-| `yes`, `no` | `bool` | describe what yes and no mean |
+| `yes`, `no` | `bool`, `float` without `#[Levels]` | describe what yes and no mean |
 | `threshold` | `bool`, `array` with `#[Of]` | `true`, or the case is listed, when P(yes) ≥ threshold (default 0.5) |
 
 For the full probabilities, use `predict()`.
@@ -446,6 +448,23 @@ $result = $laya->predict($lead->message, [
 
 $lead->score = $result->score('intent')->score; // 0.0 to 3.0
 $lead->hot   = $result->score('intent')->level() === 3 && $result->yesNo('budget')->yes();
+```
+
+Or as a decision class, with `float` parameters for the continuous values:
+
+```php
+final readonly class Lead
+{
+    public function __construct(
+        #[Ask('How ready is this person to buy?'), Levels('just browsing', 'researching options', 'comparing vendors', 'ready to buy')]
+        public float $intent, // expected level, 0.0 to 3.0
+
+        #[Ask('Does the message mention a budget, a timeline or a team size?')]
+        public float $budget, // P(yes), 0.0 to 1.0
+    ) {}
+}
+
+$scored = $laya->decide($lead->message, Lead::class);
 ```
 
 ### Finding relevant contract fields
@@ -563,7 +582,7 @@ $laya = new Laya('http://laya:8000', httpClient: new Psr18Client(new RetryableHt
 ```php
 $laya = Laya::fake([
     'department' => Department::Billing, // or 'billing'
-    'urgency'    => 2,                   // level index
+    'urgency'    => 2,                   // level index; a float expected level such as 1.3 fakes 70% level 1, 30% level 2
     'churn'      => true,                // or a probability, e.g. 0.3
 ]);
 

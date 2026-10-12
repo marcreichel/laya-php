@@ -89,3 +89,11 @@ final readonly class Urgent
 {
     public function __construct(#[Ask('How urgent is this?')] public Urgency $urgency) {}
 }
+
+final readonly class Prospect
+{
+    public function __construct(
+        #[Ask('How strong is the buying intent?'), Levels('none', 'some', 'strong')] public float $intent,
+        #[Ask('Is there budget?')] public float $budget,
+    ) {}
+}
