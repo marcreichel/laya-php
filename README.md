@@ -108,6 +108,26 @@ ClassifyTicket::dispatchSync($ticket);
 $laya->assertPredictedCount(1);
 ```
 
+#### Validation rule
+
+`Decides` is a validation rule backed by a decision. It resolves `Laya` from the container, so `Laya::fake()` works in tests.
+
+```php
+use MarcReichel\Laya\Laravel\Rules\Decides;
+
+$request->validate([
+    'body' => ['required', 'string', Decides::that(Moderation::class, fn (Moderation $m) => ! $m->abusive && ! $m->spam)
+        ->message('Please keep reviews friendly and on topic.')],
+
+    // Single yes/no question: not() passes on "no", yes() on "yes"
+    'comment' => [Decides::not('Does the text contain insults, hate speech or threats?')],
+]);
+```
+
+The callback returns `true` when the value passes. Non-strings fail without a request. The default message is `validation.laya` (`:attribute` available); the package ships English, German, French, Spanish, Italian, Dutch, Portuguese, Polish, Turkish, Russian, Japanese and Chinese (`zh_CN`), and your app's own `validation.laya` wins. If laya-serve is unreachable or busy, the validation fails; add `->passWhenUnavailable()` to let the value pass instead. Other errors are thrown.
+
+In tests, `Laya::fake(['answer' => true])` answers the `not()`/`yes()` question.
+
 ## Asking questions
 
 ```php
@@ -524,6 +544,16 @@ $moderation = $laya->decide($review->body, Moderation::class);
 if ($moderation->abusive || $moderation->spam) {
     $review->holdForModeration();
 }
+```
+
+### Validating input
+
+Reject abusive or spam reviews at the form, using the `Moderation` class from above (Laravel).
+
+```php
+$request->validate([
+    'body' => ['required', 'string', Decides::that(Moderation::class, fn (Moderation $m) => ! $m->abusive && ! $m->spam)],
+]);
 ```
 
 ### Scoring leads
