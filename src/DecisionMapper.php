@@ -26,7 +26,7 @@ use MarcReichel\Laya\Exceptions\ServerException;
  *
  * @internal
  *
- * @phpstan-type Entry array{questions: array<string, Question>, parameters: list<array{name: string, type: string, ask: Ask, scale: bool, of: class-string<\BackedEnum>|null}>}
+ * @phpstan-type Entry array{questions: array<string, Question>, parameters: list<array{name: string, type: string, ask: Ask, scale: bool, of: class-string<\BackedEnum>|null, nullable: bool}>}
  */
 final class DecisionMapper
 {
@@ -100,6 +100,71 @@ final class DecisionMapper
     }
 
     /**
+     * The decision's constructor arguments by parameter name; json_encode() turns enums, and lists of them, into backing values.
+     *
+     * @param  class-string  $class
+     * @return array<string, mixed>
+     */
+    public static function toArray(string $class, object $decision): array
+    {
+        $data = [];
+        foreach (self::entry($class)['parameters'] as ['name' => $name]) {
+            $data[$name] = new \ReflectionProperty($class, $name)->getValue($decision); // also reads private promoted properties
+        }
+
+        return $data;
+    }
+
+    /**
+     * The inverse of toArray(), through the constructor.
+     *
+     * @template T of object
+     *
+     * @param  class-string<T>  $class
+     * @param  array<array-key, mixed>  $data
+     * @return T
+     *
+     * @throws \UnexpectedValueException when $data has no value, or one of the wrong type, for a parameter
+     */
+    public static function fromArray(string $class, array $data): object
+    {
+        $arguments = [];
+        foreach (self::entry($class)['parameters'] as ['name' => $name, 'type' => $type, 'of' => $of, 'nullable' => $nullable]) {
+            if (! array_key_exists($name, $data)) {
+                throw new \UnexpectedValueException(sprintf('has no value for $%s', $name));
+            }
+            $value = $data[$name];
+            if ($value === null && $nullable) {
+                $arguments[$name] = null;
+            } elseif ($of !== null) {
+                is_array($value) || throw new \UnexpectedValueException(sprintf('has no list for $%s', $name));
+                $arguments[$name] = array_map(static fn (mixed $case): \BackedEnum => self::stored($name, $of, $case), $value);
+            } elseif (is_subclass_of($type, \BackedEnum::class)) {
+                $arguments[$name] = self::stored($name, $type, $value);
+            } elseif (get_debug_type($value) === $type || ($type === 'float' && is_int($value))) { // int widens to float in the constructor call
+                $arguments[$name] = $value;
+            } else {
+                throw new \UnexpectedValueException(sprintf('has %s for $%s, not %s', get_debug_type($value), $name, $type));
+            }
+        }
+
+        return new $class(...$arguments);
+    }
+
+    /** @param  class-string<\BackedEnum>  $enum */
+    private static function stored(string $name, string $enum, mixed $value): \BackedEnum
+    {
+        try {
+            $case = is_int($value) || is_string($value) ? $enum::tryFrom($value) : null;
+        } catch (\TypeError) { // strict_types: an int for a string enum, or a string for an int enum
+            $case = null;
+        }
+
+        return $case
+            ?? throw new \UnexpectedValueException(sprintf('has %s for $%s, which isn\'t a %s case', json_encode($value), $name, new \ReflectionClass($enum)->getShortName()));
+    }
+
+    /**
      * @param  class-string  $class
      * @return Entry
      */
@@ -128,6 +193,7 @@ final class DecisionMapper
                 'ask' => $ask,
                 'scale' => self::isScale($type),
                 'of' => $type === 'array' ? self::of($class, $parameter) : null,
+                'nullable' => $parameter->allowsNull(),
             ];
         }
 

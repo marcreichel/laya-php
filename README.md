@@ -98,6 +98,26 @@ final class ClassifyTicket implements ShouldQueue
 }
 ```
 
+To store a decision in a JSON column, cast the attribute with `AsDecision`:
+
+```php
+use MarcReichel\Laya\Laravel\AsDecision;
+
+protected function casts(): array
+{
+    return ['triage' => AsDecision::of(Triage::class)]; // or AsDecision::class.':'.Triage::class
+}
+```
+
+```php
+$ticket->triage = $laya->decide($ticket->body, Triage::class);
+$ticket->save();
+
+$ticket->triage->department; // Department::Billing
+```
+
+It stores the constructor arguments by name, enums by backing value (`{"department":"billing","urgency":2,"churn":true}`), and reads them back through the constructor, so `readonly` classes work. Lists (`#[Of]`), floats and `null` (below `minConfidence`) round-trip; a `null` column is a `null` attribute. Assigning anything but an instance of the class, or reading JSON with a missing key or an unknown enum value, throws an `InvalidDecisionCastException` that names the model attribute.
+
 To change the config file, publish it with `php artisan vendor:publish --tag=laya-config`. In tests, `Laya::fake([...])` also replaces the container's instance, so injected code gets the fake (see [Testing your code](#testing-your-code)):
 
 ```php
