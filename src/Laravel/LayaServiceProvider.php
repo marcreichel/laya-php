@@ -31,6 +31,7 @@ final class LayaServiceProvider extends ServiceProvider
                 cacheTtl: is_numeric($ttl) ? (int) $ttl : null,
                 events: filter_var($config->get('laya.events.enabled'), FILTER_VALIDATE_BOOLEAN) ? new EventDispatcher($this->app) : null,
                 includeState: filter_var($config->get('laya.events.include_state'), FILTER_VALIDATE_BOOLEAN),
+                batchSize: $config->integer('laya.batch_size'),
             );
         });
     }
