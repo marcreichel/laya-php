@@ -80,19 +80,19 @@ it('fails with a message', function (array $parameters, string $message) {
 ]);
 
 it('runs without Laravel as vendor/bin/laya-eval', function () {
-    expect(laya_eval(['App\Decisions\Triage', triageCsv(), '--precision=0.8']))->toBe([0, TRIAGE_REPORT."\n", '']);
+    expect(laya_eval([Triage::class, triageCsv(), '--precision=0.8']))->toBe([0, TRIAGE_REPORT."\n", '']);
 });
 
 it('prints JSON without Laravel', function () {
     $expected = new Evaluation(new Laya('http://laya.test', httpClient: triageClient()))->run(Triage::class, triageRows())->toJson();
 
-    expect(laya_eval(['--json', 'App\Decisions\Triage', triageCsv()]))->toBe([0, $expected."\n", '']);
+    expect(laya_eval(['--json', Triage::class, triageCsv()]))->toBe([0, $expected."\n", '']);
 });
 
 it('takes the server from --url and --api-key, then LAYA_URL and LAYA_API_KEY', function (array $options, array $env, string $url, string $authorization) {
     $sent = [];
 
-    expect(laya_eval(['App\Decisions\Triage', labelledFile('csv', "state\nx\n"), ...$options], $env, recordingClient($sent))[0])->toBe(0)
+    expect(laya_eval([Triage::class, labelledFile('csv', "state\nx\n"), ...$options], $env, recordingClient($sent))[0])->toBe(0)
         ->and((string) $sent[0]->getUri())->toBe($url)
         ->and($sent[0]->getHeaderLine('Authorization'))->toBe($authorization);
 })->with([
@@ -105,14 +105,14 @@ it('takes the server from --url and --api-key, then LAYA_URL and LAYA_API_KEY', 
 it('shows the usage for anything but a class and a file', function (array $arguments) {
     expect(laya_eval($arguments))->toBe([1, '', "Usage: laya-eval <class> <file> [--precision=0.95] [--json] [--url=http://localhost:8000] [--api-key=...]\n"]);
 })->with([
-    'no file' => [['App\Decisions\Triage']],
-    'an unknown option' => [['App\Decisions\Triage', 'triage.csv', '--verbose']],
+    'no file' => [[Triage::class]],
+    'an unknown option' => [[Triage::class, 'triage.csv', '--verbose']],
 ]);
 
 it('fails with a message without Laravel', function (array $arguments, string $message) {
     expect(laya_eval($arguments))->toBe([1, '', $message."\n"]);
 })->with([
     'an unknown class' => [['Decisions\Triage', 'triage.csv'], 'Class "Decisions\Triage" not found.'],
-    'an unreadable file' => [['App\Decisions\Triage', 'missing.csv'], 'Cannot read "missing.csv".'],
-    'a precision that is not a number' => [['App\Decisions\Triage', 'missing.csv', '--precision=high'], '--precision must be a number from 0 to 1.'],
+    'an unreadable file' => [[Triage::class, 'missing.csv'], 'Cannot read "missing.csv".'],
+    'a precision that is not a number' => [[Triage::class, 'missing.csv', '--precision=high'], '--precision must be a number from 0 to 1.'],
 ]);

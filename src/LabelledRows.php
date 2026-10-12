@@ -44,6 +44,10 @@ final class LabelledRows
         }
         // Spreadsheets save UTF-8 with a byte order mark in front of the first column's name.
         $header = array_map(fn (?string $name) => trim((string) $name, "\u{FEFF} "), $header);
+        $duplicates = array_keys(array_filter(array_count_values($header), fn (int $n) => $n > 1));
+        if ($duplicates !== []) {
+            throw new \UnexpectedValueException(sprintf('The CSV header repeats %s.', implode(', ', $duplicates)));
+        }
 
         $rows = [];
         $row = 1;
