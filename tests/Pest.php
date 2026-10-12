@@ -5,6 +5,7 @@ declare(strict_types=1);
 use GuzzleHttp\Psr7\Response;
 use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Question;
+use MarcReichel\Laya\Testing\FakeHttpClient;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
@@ -107,4 +108,85 @@ function questions(): array
         'urgency' => Question::score('How urgent?', ['not urgent', 'soon', 'blocking']),
         'churn' => Question::yesNo('Threatens to cancel?'),
     ];
+}
+
+/** Six labelled tickets and the fake's answers to them: some right, some wrong, at varied confidence. */
+function triageClient(): FakeHttpClient
+{
+    $client = new FakeHttpClient([]);
+    $client->sequence(
+        ['department' => 'billing', 'urgency' => 2, 'churn' => 0.9],
+        ['department' => 'billing', 'urgency' => 1.3, 'churn' => 0.3],
+        ['department' => 'billing', 'urgency' => 0, 'churn' => 0.6],
+        ['department' => 'technical', 'urgency' => 2, 'churn' => 0.7],
+        ['department' => null, 'urgency' => 1, 'churn' => 0.2],
+        ['department' => 'billing', 'urgency' => 2, 'churn' => 0.4],
+    );
+
+    return $client;
+}
+
+function triageRows(): array
+{
+    return [
+        ['state' => 's1', 'department' => 'billing', 'urgency' => '2', 'churn' => 'true'],
+        ['state' => 's2', 'department' => 'billing', 'urgency' => '1', 'churn' => 'false'],
+        ['state' => 's3', 'department' => 'technical', 'urgency' => '0', 'churn' => 'true'],
+        ['state' => 's4', 'department' => 'technical', 'urgency' => '', 'churn' => 'false'],
+        ['state' => 's5', 'department' => 'other', 'urgency' => '1', 'churn' => 'false'],
+        ['state' => 's6', 'department' => 'billing', 'urgency' => '2', 'churn' => 'true'],
+    ];
+}
+
+const TRIAGE_REPORT = <<<'TXT'
+    App\Decisions\Triage: 6 rows, target precision 0.80
+
+    department: 6 labelled
+      accuracy 0.67
+      confusion (label down, answer across):
+                     billing  technical      other
+          billing          3          0          0
+        technical          1          1          0
+            other          1          0          0
+      calibration (answer confidence: accuracy):
+        0.0-0.1  0.00 of 1
+        0.9-1.0  0.80 of 5
+      minConfidence 1 reaches precision 0.80 and sends 17% to a human
+
+    urgency: 5 labelled
+      accuracy 1.00
+      confusion (label down, answer across):
+           0  1  2
+        0  1  0  0
+        1  0  2  0
+        2  0  0  2
+      calibration (answer confidence: accuracy):
+        0.9-1.0  1.00 of 5
+      minConfidence 1 reaches precision 1.00 and sends 0% to a human
+
+    churn: 6 labelled
+      accuracy 0.67, precision 0.67, recall 0.67
+      calibration (answer confidence: accuracy):
+        0.6-0.7  0.50 of 2
+        0.7-0.8  0.50 of 2
+        0.8-0.9  1.00 of 1
+        0.9-1.0  1.00 of 1
+      minConfidence 0.8 reaches precision 1.00 and sends 67% to a human
+      threshold 0.4 has the best F1 (0.86)
+    TXT;
+
+/** triageRows() as a CSV file. */
+function triageCsv(): string
+{
+    return labelledFile('csv', implode("\n", array_map(fn (array $row) => implode(',', $row), [array_keys(triageRows()[0]), ...triageRows()]))."\n");
+}
+
+/** A file named *.$extension holding $contents, removed after the test run. */
+function labelledFile(string $extension, string $contents): string
+{
+    $path = sys_get_temp_dir().'/laya-'.bin2hex(random_bytes(4)).'.'.$extension;
+    file_put_contents($path, $contents);
+    register_shutdown_function(fn () => @unlink($path));
+
+    return $path;
 }

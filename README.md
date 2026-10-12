@@ -75,6 +75,8 @@ echo "..." | php artisan laya:try "Decisions\Triage" --model=multilingual --json
 
 It takes `--model=`, `--max-len=`, `--head-max-len=` and `--json`, and exits with 1 for an unknown or invalid class or an unreachable server.
 
+`php artisan laya:eval` measures a decision class against labelled examples and suggests `minConfidence` and `threshold` values; see [Evaluating a decision class](#evaluating-a-decision-class).
+
 Inject it wherever you need it:
 
 ```php
@@ -393,6 +395,65 @@ $decisions[42]->result;
 ```
 
 `decideManyWithResult()` is experimental like `decideMany()` and keeps the keys of the states.
+
+## Evaluating a decision class
+
+Wording questions and picking `minConfidence` and `threshold` values is guesswork until you measure them. Label some real examples in a CSV (with a header row) or JSON Lines file: one `state` column, and one column per parameter you labelled, holding the enum value, the level index or `true`/`false`. An `#[Of]` parameter takes a column per case, named like its questions (`topics.billing`). Missing or empty labels aren't scored.
+
+```csv
+state,department,urgency,churn
+"Billed twice for March, refund it or we cancel.",billing,2,true
+"The export button does nothing.",technical,1,
+```
+
+```json lines
+{"state": "Billed twice for March, refund it or we cancel.", "department": "billing", "urgency": 2, "churn": true}
+```
+
+Then run it against the decision class, in Laravel or with the bundled script:
+
+```bash
+php artisan laya:eval "App\Decisions\Triage" storage/triage.csv --precision=0.95
+vendor/bin/laya-eval "App\Decisions\Triage" triage.jsonl --url=http://localhost:8000 --api-key=...
+```
+
+`laya:eval` resolves short class names under `App\` like `laya:try`. `vendor/bin/laya-eval` needs no Laravel. It takes the full class name and reads the server from `--url` and `--api-key`, falling back to `LAYA_URL` and `LAYA_API_KEY`. Both print a report per labelled parameter:
+
+```text
+App\Decisions\Triage: 120 rows, target precision 0.95
+
+department: 118 labelled
+  accuracy 0.91
+  confusion (label down, answer across):
+                 billing  technical      other
+      billing         52          2          1
+    technical          3         41          2
+        other          1          2         14
+  calibration (answer confidence: accuracy):
+    0.4-0.5  0.50 of 6
+    ...
+    0.9-1.0  0.98 of 81
+  minConfidence 0.83 reaches precision 0.96 and sends 22% to a human
+
+churn: 120 labelled
+  accuracy 0.93, precision 0.81, recall 0.87
+  ...
+  threshold 0.35 has the best F1 (0.86)
+```
+
+Labels are compared with laya's raw answer (the most likely option or level, or P(yes) ≥ 0.5), so the class's own `minConfidence` and `threshold` don't apply. Calibration is the accuracy per 0.1-wide answer confidence bucket. The `minConfidence` line gives the lowest one whose kept answers reach `--precision` (0.95 by default), and the share of answers it would send to a human instead. Yes/no parameters get precision and recall of "yes", and the `threshold` with the best F1. Add `--json` for machine-readable output in CI. Requests go through `predictMany()`, with a fallback to one `predict()` per state on servers without the batch endpoint.
+
+An unknown column, a label that isn't one of the parameter's options, or a class that isn't a decision class fails with a message (exit code 1). Without a command line, `Evaluation` takes a `Laya` and the rows, and `LabelledRows` reads them from a file:
+
+```php
+use MarcReichel\Laya\Evaluation;
+use MarcReichel\Laya\LabelledRows;
+
+$report = new Evaluation($laya)->run(Triage::class, LabelledRows::read('triage.csv'), precision: 0.95);
+
+$report->parameters['department']['min_confidence']; // ['value' => 0.83, 'precision' => 0.96, 'to_human' => 0.22]
+echo $report->render();
+```
 
 ## Recipes
 
