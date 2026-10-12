@@ -87,4 +87,4 @@ it('fakes an expected level by splitting it between its two neighbouring levels'
 it('fails loudly on a fake score outside the levels', function (mixed $value) {
     expect(fn () => Laya::fake(['u' => $value])->predict('x', ['u' => Question::score('Urgent?', ['low', 'high'])]))
         ->toThrow(LogicException::class, 'Fake answer for score question "u" must be a level index from 0 to 1, or an expected level in between.');
-})->with([-0.1, 1.1, '1']);
+})->with([-0.1, 1.1, NAN, '1']);

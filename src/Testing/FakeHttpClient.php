@@ -180,7 +180,7 @@ final class FakeHttpClient implements ClientInterface
                     'probabilities' => array_combine($labels, array_map(fn ($l) => $l === (string) $value ? 1.0 : 0.0, $labels))];
 
             case 'score':
-                if (! is_int($value) && ! is_float($value) || $value < 0 || $value > count($criteria) - 1) {
+                if (! is_int($value) && ! is_float($value) || ! ($value >= 0 && $value <= count($criteria) - 1)) { // NAN fails both comparisons
                     throw new \LogicException(sprintf('Fake answer for score question "%s" must be a level index from 0 to %d, or an expected level in between.', $id, count($criteria) - 1));
                 }
                 $score = (float) $value;
