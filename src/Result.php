@@ -27,6 +27,10 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
      * @param  array<mixed>  $routing  laya's full routing decision (model, reason, detected language, ...)
      * @param  array<mixed>  $raw  the whole response body
      * @param  bool  $truncated  laya cut the state off at its token budget; raise maxLen to read it all (laya-serve >= 0.3.22)
+     * @param  int|null  $stateTokens  tokens the whole state needs, null when the server doesn't report it
+     * @param  int|null  $stateTokensDropped  tokens at least one question didn't get, null when the server doesn't report it
+     * @param  list<string>  $truncatedQuestions  ids of the questions whose own window was cut
+     * @param  array<array-key, CollapsedOptions>  $collapsedOptions  questions whose options laya collapsed, by id
      */
     public function __construct(
         public array $answers,
@@ -35,6 +39,10 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
         public int $inputTokens,
         public array $raw,
         public bool $truncated = false,
+        public ?int $stateTokens = null,
+        public ?int $stateTokensDropped = null,
+        public array $truncatedQuestions = [],
+        public array $collapsedOptions = [],
     ) {}
 
     /** @param array<mixed> $raw */
@@ -52,6 +60,10 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
         $routing = (array) ($raw['routing'] ?? []);
         $usage = is_array($raw['usage'] ?? null) ? $raw['usage'] : [];
         $tokens = $usage['input_tokens'] ?? 0;
+        $stateTokens = $usage['state_tokens'] ?? null;
+        $dropped = $usage['state_tokens_dropped'] ?? null;
+        $truncatedQuestions = is_array($usage['truncated_questions'] ?? null) ? $usage['truncated_questions'] : [];
+        $options = is_array($usage['options'] ?? null) ? $usage['options'] : [];
 
         return new self(
             $answers,
@@ -60,6 +72,10 @@ final readonly class Result implements \ArrayAccess, \Countable, \IteratorAggreg
             is_int($tokens) ? $tokens : 0,
             $raw,
             ($usage['truncated'] ?? false) === true,
+            is_int($stateTokens) ? $stateTokens : null,
+            is_int($dropped) ? $dropped : null,
+            array_values(array_filter($truncatedQuestions, is_string(...))),
+            array_filter(array_map(CollapsedOptions::fromArray(...), $options)),
         );
     }
 

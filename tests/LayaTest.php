@@ -9,6 +9,7 @@ use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
 use MarcReichel\Laya\Answers\ChoiceAnswer;
 use MarcReichel\Laya\Answers\YesNoAnswer;
+use MarcReichel\Laya\CollapsedOptions;
 use MarcReichel\Laya\Exceptions\AuthenticationException;
 use MarcReichel\Laya\Exceptions\InvalidQuestionException;
 use MarcReichel\Laya\Exceptions\ServerBusyException;
@@ -265,6 +266,52 @@ it('tolerates malformed routing and usage', function () {
         ->and(Result::fromArray(['answers' => []])->inputTokens)->toBe(0)
         ->and($noInt->inputTokens)->toBe(0)
         ->and(Result::fromArray(['answers' => [], 'usage' => ['truncated' => 1]])->truncated)->toBeFalse();
+});
+
+it('reads the full usage report', function () {
+    $result = Result::fromArray(['answers' => [], 'usage' => [
+        'input_tokens' => 512,
+        'state_tokens' => 900,
+        'state_tokens_dropped' => 388,
+        'truncated' => true,
+        'truncated_questions' => ['department', 'urgency'],
+        'options' => [
+            'department' => ['total' => 40, 'distinct' => 12, 'tokens_per_option' => 3],
+            0 => ['total' => 5, 'distinct' => 5, 'tokens_per_option' => 8],
+        ],
+    ]]);
+
+    expect($result->stateTokens)->toBe(900)
+        ->and($result->stateTokensDropped)->toBe(388)
+        ->and($result->truncatedQuestions)->toBe(['department', 'urgency'])
+        ->and($result->collapsedOptions)->toEqual(['department' => new CollapsedOptions(40, 12, 3), '0' => new CollapsedOptions(5, 5, 8)]);
+});
+
+it('leaves an unreported or malformed usage report empty', function () {
+    $bare = Result::fromArray(['answers' => [], 'usage' => ['input_tokens' => 1, 'output_tokens' => 0]]);
+    $garbage = Result::fromArray(['answers' => [], 'usage' => [
+        'state_tokens' => '900',
+        'state_tokens_dropped' => 1.5,
+        'truncated_questions' => 'department',
+        'options' => 'garbage',
+    ]]);
+    $mixed = Result::fromArray(['answers' => [], 'usage' => [
+        'truncated_questions' => [1 => 'department', 2 => 3, 3 => 'urgency'],
+        'options' => [
+            'a' => 'garbage',
+            'b' => ['total' => '40', 'distinct' => 12, 'tokens_per_option' => 3],
+            'c' => ['total' => 40, 'distinct' => '12', 'tokens_per_option' => 3],
+            'd' => ['total' => 40, 'distinct' => 12, 'tokens_per_option' => '3'],
+            'e' => [],
+        ],
+    ]]);
+
+    expect([$bare->stateTokens, $bare->stateTokensDropped, $bare->truncatedQuestions, $bare->collapsedOptions])->toBe([null, null, [], []])
+        ->and([$garbage->stateTokens, $garbage->stateTokensDropped, $garbage->truncatedQuestions, $garbage->collapsedOptions])->toBe([null, null, [], []])
+        ->and($mixed->truncatedQuestions)->toBe(['department', 'urgency'])
+        ->and($mixed->collapsedOptions)->toBe([])
+        ->and(CollapsedOptions::fromArray(new ArrayObject(['total' => 40, 'distinct' => 12, 'tokens_per_option' => 3])))->toBeNull()
+        ->and(new Result([], null, [], 0, []))->toMatchObject(['stateTokens' => null, 'stateTokensDropped' => null, 'truncatedQuestions' => [], 'collapsedOptions' => []]);
 });
 
 it('reports a state laya cut off', function () {

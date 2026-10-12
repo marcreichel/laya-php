@@ -167,7 +167,11 @@ final class TryCommand extends Command
         $this->line(sprintf('Routed to %s, %d input tokens', $result->routedModel ?? 'an unknown checkpoint', $result->inputTokens));
 
         if ($result->truncated) {
-            $this->warn('laya cut the text off at its token budget; raise --max-len to read all of it.');
+            $this->warn(sprintf(
+                'laya cut the text off at its token budget%s%s; raise --max-len to read all of it.',
+                $result->truncatedQuestions === [] ? '' : ' for '.OutputFormatter::escape(implode(', ', $result->truncatedQuestions)),
+                $result->stateTokensDropped === null ? '' : sprintf(' (%d tokens dropped)', $result->stateTokensDropped),
+            ));
         }
     }
 
@@ -280,6 +284,10 @@ final class TryCommand extends Command
             'routed_model' => $result->routedModel,
             'input_tokens' => $result->inputTokens,
             'truncated' => $result->truncated,
+            'state_tokens' => $result->stateTokens,
+            'state_tokens_dropped' => $result->stateTokensDropped,
+            'truncated_questions' => $result->truncatedQuestions,
+            'collapsed_options' => (object) $result->collapsedOptions,
             'parameters' => $parameters,
         ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
     }

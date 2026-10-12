@@ -153,7 +153,7 @@ if ($result->choice('department')->answerConfidence < 0.7) {
 }
 ```
 
-Servers that only follow TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json), such as [sys1](https://github.com/alvarobartt/sys1), don't send an `answer_confidence`. Then `answerConfidence` falls back to `confidence`, and a yes/no answer without a `confidence` gets laya's own `max(P(yes), P(no))`. Thresholds and `minConfidence` keep working, though `confidence` is stricter than the calibrated value for choice and score answers. The same applies to laya-serve 0.3.24 or later started with `LAYA_JEV_STRICT=1`, which strips `answer_confidence`, `routing` and the truncation report from its responses, so `routedModel` is `null` and `truncated` is always `false` there.
+Servers that only follow TypeSafe's [OpenAPI spec](https://api.typesafe.ai/openapi.json), such as [sys1](https://github.com/alvarobartt/sys1), don't send an `answer_confidence`. Then `answerConfidence` falls back to `confidence`, and a yes/no answer without a `confidence` gets laya's own `max(P(yes), P(no))`. Thresholds and `minConfidence` keep working, though `confidence` is stricter than the calibrated value for choice and score answers. The same applies to laya-serve 0.3.24 or later started with `LAYA_JEV_STRICT=1`, which strips `answer_confidence`, `routing` and the truncation report from its responses, so `routedModel` is `null`, `truncated` is always `false` and the rest of the usage report is empty there.
 
 ### Abstention on the server
 
@@ -216,6 +216,18 @@ $result = $laya->predict($contract, $questions);
 
 if ($result->truncated) {
     $result = $laya->predict($contract, $questions, maxLen: 4096);
+}
+```
+
+laya-serve also reports how much it cut. All of this is optional, so a server that doesn't send it leaves the integers `null` and the lists empty:
+
+```php
+$result->stateTokens;         // 900, the tokens the whole state needs
+$result->stateTokensDropped;  // 388, the most tokens any one question didn't get
+$result->truncatedQuestions;  // ['department'], the questions whose own window was cut
+
+foreach ($result->collapsedOptions as $id => $options) {
+    // laya merged $options->total options into $options->distinct, $options->tokensPerOption tokens each
 }
 ```
 
