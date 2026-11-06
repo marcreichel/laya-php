@@ -279,7 +279,7 @@ it('builds a retrying client from laya.retries and laya.timeout', function () {
     expect($http)->toBeInstanceOf(Psr18Client::class)
         ->and($retrying)->toBeInstanceOf(RetryableHttpClient::class)
         ->and(prop($retrying, 'maxRetries'))->toBe(4)
-        ->and(prop(prop($retrying, 'strategy'), 'statusCodes'))->toBe([408, 503])
+        ->and(prop(prop($retrying, 'strategy'), 'statusCodes'))->toBe([0, 408, 503])
         ->and(prop(prop($retrying, 'client'), 'defaultOptions')['timeout'])->toBe(2.5);
 });
 
