@@ -390,6 +390,27 @@ final class Laya
     }
 
     /**
+     * The checkpoint laya-serve would answer $questions about $state with, without running inference. Not cached,
+     * and no events.
+     *
+     *     $laya->route('Mein Konto wurde zweimal belastet')->model; // "multilingual"
+     *
+     * @param  string|array<mixed>|\JsonSerializable  $state
+     * @param  array<string, Question>  $questions  the router picks the typed-decisions checkpoint by question ids
+     * @param  bool  $explain  add the router's diagnostic
+     */
+    public function route(string|array|\JsonSerializable $state, array $questions = [], ?Model $model = null, bool $explain = false): Routing
+    {
+        $body = ['state' => $state, 'questions' => self::wire($questions), 'explain' => $explain];
+        // Unlike prediction, the route endpoint takes no model to let the router pick.
+        if ($model !== null) {
+            $body['model'] = $model->value;
+        }
+
+        return Routing::fromArray($this->send($this->post('/v1/route', self::json($body)), 'laya-serve has no route endpoint; route() needs laya-serve 0.4.19 or later.'));
+    }
+
+    /**
      * Assert at least one prediction was made (matching $callback, if given). Faked clients only.
      *
      * @param  (callable(mixed $state, array<array-key, mixed> $questions, ?string $model): bool)|null  $callback
@@ -463,11 +484,7 @@ final class Laya
      */
     private function sendBatch(array $body, int $count): array
     {
-        try {
-            $raw = $this->send($this->post('/v1/systemone/batch', self::json($body)));
-        } catch (ServerException $e) {
-            throw $e->status === 404 ? new ServerException('laya-serve has no batch endpoint; predictMany() needs laya-serve 0.3.22 or later.', 404, $e) : $e;
-        }
+        $raw = $this->send($this->post('/v1/systemone/batch', self::json($body)), 'laya-serve has no batch endpoint; predictMany() needs laya-serve 0.3.22 or later.');
         $answers = $raw['results'] ?? null;
         if (! is_array($answers) || ! array_is_list($answers) || count($answers) !== $count) {
             throw new ServerException('The laya-serve batch response doesn\'t have one result per state.', 200);
@@ -700,8 +717,11 @@ final class Laya
         return $this->apiKey === null ? $request : $request->withHeader('Authorization', 'Bearer '.$this->apiKey);
     }
 
-    /** @return array<mixed> */
-    private function send(RequestInterface $request): array
+    /**
+     * @param  string|null  $missing  the message for a 404, for endpoints older laya-serve versions don't have
+     * @return array<mixed>
+     */
+    private function send(RequestInterface $request, ?string $missing = null): array
     {
         try {
             $response = $this->http->sendRequest($request);
@@ -725,9 +745,13 @@ final class Laya
         $message = is_string($detail) ? $detail : ($detail !== null ? json_encode($detail) : $response->getReasonPhrase());
         $message = sprintf('laya-serve: %s (HTTP %d)', $message ?: 'error', $status);
 
+        if ($status === 404 && $missing !== null) {
+            throw new ServerException($missing, 404, new ServerException($message, 404));
+        }
+
         throw match ($status) {
             401 => new AuthenticationException($message, $status),
-            503 => new ServerBusyException($message, $status),
+            408, 503 => new ServerBusyException($message, $status),
             400, 413, 422 => new ValidationException($message, $status),
             default => new ServerException($message, $status),
         };

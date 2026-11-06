@@ -270,3 +270,13 @@ it('accepts a batch of 64 by default and refuses 65', function () {
 
     expect($post(64))->toBe(200)->and($post(65))->toBe(413);
 });
+
+it('routes to the pinned checkpoint or multilingual, without recording a prediction', function () {
+    $laya = Laya::fake();
+    $q = ['q' => Question::yesNo('?')];
+
+    expect($laya->route('Billed twice', $q))->toEqual(new MarcReichel\Laya\Routing('multilingual', 'laya-fake', 'fake'))
+        ->and($laya->route('Billed twice', model: Model::English)->model)->toBe('english')
+        ->and(fn () => Laya::fake(limits: new Limits(maxStateLength: 3))->route('four'))->toThrow(ValidationException::class, 'state too large (4 > 3 chars)');
+    $laya->assertNothingPredicted();
+});

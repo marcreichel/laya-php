@@ -20,6 +20,7 @@ use MarcReichel\Laya\Laya;
 use MarcReichel\Laya\Model;
 use MarcReichel\Laya\Question;
 use MarcReichel\Laya\Result;
+use MarcReichel\Laya\Routing;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -104,6 +105,7 @@ it('maps error statuses onto exceptions carrying laya\'s detail', function (int 
     [413, ValidationException::class],
     [422, ValidationException::class],
     [401, AuthenticationException::class],
+    [408, ServerBusyException::class],
     [503, ServerBusyException::class],
     [500, ServerException::class],
 ]);
@@ -429,4 +431,33 @@ it('does not cache a response that is not laya-shaped', function () {
 
     expect(fn () => new Laya(httpClient: $client, cache: $cache)->predict('x', questions()))->toThrow(ServerException::class);
     expect($cache->getStore()->all())->toBe([]);
+});
+
+it('asks /v1/route which checkpoint laya would pick, sending a model only when pinned', function () {
+    $sent = [];
+    $response = ['model' => 'multilingual', 'repo' => 'convaiinnovations/laya/multilingual', 'reason' => 'German',
+        'diagnostic' => ['stage' => 'whole_state', 'reason' => 'insufficient_words', 'source' => null]];
+    $laya = layaRespondingWith(200, $response, $sent);
+    $routing = $laya->route('Mein Konto wurde zweimal belastet', questions(), explain: true);
+    $laya->route('Billed twice', model: Model::English);
+
+    $auto = json_decode((string) $sent[0]->getBody(), true);
+    $pinned = json_decode((string) $sent[1]->getBody(), true);
+    expect((string) $sent[0]->getUri())->toBe('http://laya.local/v1/route')
+        ->and($auto)->not->toHaveKey('model')
+        ->and($auto['explain'])->toBeTrue()
+        ->and(array_keys($auto['questions']))->toBe(['department', 'urgency', 'churn'])
+        ->and($pinned)->toBe(['state' => 'Billed twice', 'questions' => [], 'explain' => false, 'model' => 'english'])
+        ->and($routing)->toEqual(new Routing('multilingual', 'convaiinnovations/laya/multilingual', 'German', $response['diagnostic']));
+});
+
+it('reads a routing answer, dropping what is not laya-shaped', function () {
+    expect(layaRespondingWith(200, ['model' => 'english', 'repo' => 'r', 'reason' => 'English'])->route('x'))->toEqual(new Routing('english', 'r', 'English'))
+        ->and(layaRespondingWith(200, ['model' => 5, 'diagnostic' => 'whole_state'])->route('x'))->toEqual(new Routing('', '', ''));
+});
+
+it('explains a missing route endpoint by the laya-serve version it needs', function () {
+    expect(fn () => layaRespondingWith(404, ['detail' => 'Not Found'])->route('x'))->toThrow(ServerException::class, 'route() needs laya-serve 0.4.19 or later')
+        ->and(fn () => layaRespondingWith(404, ['detail' => 'Not Found'])->route('x'))->toThrow(fn (ServerException $e) => expect($e->getPrevious())->toEqual(new ServerException('laya-serve: Not Found (HTTP 404)', 404)))
+        ->and(fn () => layaRespondingWith(500, ['detail' => 'routing failed'])->route('x'))->toThrow(ServerException::class, 'routing failed');
 });

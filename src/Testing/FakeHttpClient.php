@@ -70,10 +70,16 @@ final class FakeHttpClient implements ClientInterface
 
         $minConfidence = $body['min_confidence'] ?? null;
 
-        $batch = str_ends_with($request->getUri()->getPath(), '/batch');
+        $path = $request->getUri()->getPath();
+        $batch = str_ends_with($path, '/batch');
         $states = $batch ? self::array($body['states'] ?? null) : [$body['state'] ?? null];
         if (($violation = $this->violation($states, $questions, $batch)) !== null) {
             return $this->json(['detail' => $violation], 413);
+        }
+
+        // Routing isn't a prediction: it is neither recorded nor answered from the registered answers.
+        if (str_ends_with($path, '/route')) {
+            return $this->json(self::routing($model) + ['repo' => 'laya-fake']);
         }
 
         // A batch records each state as its own prediction, so assertions don't care whether code batched.
@@ -152,8 +158,18 @@ final class FakeHttpClient implements ClientInterface
             'model' => 'laya-fake',
             'answers' => $answers,
             'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
-            'routing' => ['model' => $model ?? 'multilingual', 'reason' => 'fake'],
+            'routing' => self::routing($model),
         ];
+    }
+
+    /**
+     * The pinned model, or laya-serve's default for text whose language it can't identify.
+     *
+     * @return array{model: string, reason: string}
+     */
+    private static function routing(?string $model): array
+    {
+        return ['model' => $model ?? 'multilingual', 'reason' => 'fake'];
     }
 
     /**

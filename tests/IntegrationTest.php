@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MarcReichel\Laya\Laya;
+use MarcReichel\Laya\Model;
 use MarcReichel\Laya\Question;
 
 // Runs against a real laya-serve: `docker compose up -d --wait` then `LAYA_URL=http://localhost:8000 composer test:integration`.
@@ -53,4 +54,12 @@ it('applies token budgets to a batch', function () {
 
     expect($this->laya->predictMany($long, $question)[0]->truncated)->toBeTrue()
         ->and($this->laya->predictMany($long, $question, maxLen: 4096)[0]->truncated)->toBeFalse();
+})->group('integration');
+
+it('routes without running inference', function () {
+    $routing = $this->laya->route('Hi, we were billed twice for March.', explain: true);
+
+    expect($routing->model)->not->toBe('')
+        ->and($routing->reason)->not->toBe('')
+        ->and($this->laya->route('Hello', model: Model::English)->model)->toBe('english');
 })->group('integration');
