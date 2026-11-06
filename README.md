@@ -38,7 +38,7 @@ composer require marcreichel/laya-php
 
 PHP 8.4+. You also need a PSR-18 HTTP client (Guzzle, Symfony HttpClient, …). The SDK finds the installed one automatically.
 
-To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to v0.4.12, commit [`ffc1420`](https://github.com/NandhaKishorM/laya/commit/ffc142012af63d015fa19f05f29f9c5ff329a2cc)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
+To run `laya-serve` locally, use the `compose.yaml` in this repository (it pins upstream Laya to v0.4.21, commit [`8c42cf3`](https://github.com/NandhaKishorM/laya/commit/8c42cf35127448ad4b2dfc011ee087a9f134488e)) or follow [Laya's Docker guide](https://github.com/NandhaKishorM/laya/blob/main/docs/docker.md):
 
 ```bash
 docker compose up -d --wait   # http://localhost:8000
@@ -54,7 +54,7 @@ For Laravel 13+, the service provider is auto-discovered. It registers `Laya` as
 LAYA_URL=http://localhost:8000
 LAYA_API_KEY=
 LAYA_TIMEOUT=       # seconds; needs symfony/http-client (see below)
-LAYA_RETRIES=       # retries on 503 and transport errors, with backoff
+LAYA_RETRIES=       # retries on 503, 408 and transport errors, with backoff
 LAYA_CACHE_STORE=   # e.g. redis, to cache predictions (see Caching)
 LAYA_CACHE_TTL=     # seconds
 LAYA_CACHE_VERSIONED=false        # add the checkpoint revisions to the cache keys (see Caching)
@@ -237,6 +237,15 @@ By default, laya's router picks a checkpoint by language: text identified as Eng
 use MarcReichel\Laya\Model;
 
 $laya->predict($text, $questions, model: Model::Multilingual);
+```
+
+To see which checkpoint the router would pick without paying for inference, ask `route()` (laya-serve >= 0.4.19). Pass the questions too: the router sends questions that match the typed-decisions workflow to that checkpoint.
+
+```php
+$routing = $laya->route($text, $questions, explain: true);
+$routing->model;      // "multilingual"
+$routing->reason;     // why the router picked it
+$routing->diagnostic; // the router's stage, reason and source; null without explain
 ```
 
 ### Long documents
@@ -657,7 +666,7 @@ By default the key doesn't include the checkpoint revision, so clear the cache (
 $laya = new Laya('http://laya:8000', cache: $psr16Cache, cacheTtl: 86400, versionCache: true);
 ```
 
-With `versionCache`, the first lookup per instance calls `/health` once and puts the checkpoint revisions into the key (`laya.<revisionhash>.<bodyhash>`). The hash is also kept in the cache for 60 seconds, so short-lived PHP-FPM requests don't each call `/health`. A changed revision means new keys; the old entries are never hit again and expire through the TTL. If `/health` fails or reports no revisions (sys1), Laya uses the plain key and the prediction goes ahead. It's off by default, since turning it on changes every key. In Laravel, set `LAYA_CACHE_VERSIONED=true`.
+With `versionCache`, the first lookup per instance calls `/health` once and puts the checkpoint revisions into the key (`laya.<revisionhash>.<bodyhash>`). The hash is also kept in the cache for 60 seconds, so short-lived PHP-FPM requests don't each call `/health`. A changed revision means new keys; the old entries are never hit again and expire through the TTL. If `/health` fails or reports no revisions (sys1), Laya uses the plain key and the prediction goes ahead. It's off by default, since turning it on changes every key. In Laravel, set `LAYA_CACHE_VERSIONED=true`. Upgrading `laya-serve` itself can change which checkpoint the router picks for the same text, and the revisions don't see that, so clear the cache after such an upgrade too.
 
 The cache is best-effort: it never fails a prediction. If reading it throws (say, Redis is unreachable), or an entry isn't a laya response, Laya asks `laya-serve` and overwrites the entry with the answer. If writing it throws, you get the result anyway, uncached; in a batch, every state still gets its result. Only exceptions are caught, so an `Error` still surfaces. With an event dispatcher, each failure dispatches a `CacheFailed` (see Events); without one, failures are silent.
 
@@ -714,7 +723,7 @@ Everything the SDK throws implements `MarcReichel\Laya\Exceptions\LayaException`
 | `InvalidOptionException` | a request option is malformed, such as a `minConfidence` outside 0 to 1; thrown before any request is sent |
 | `ValidationException` | laya rejected the request (400/413/422); the message names the problem |
 | `AuthenticationException` | wrong or missing API key (401) |
-| `ServerBusyException` | laya-serve is at its concurrency limit (503); safe to retry |
+| `ServerBusyException` | laya-serve is at its concurrency limit (503), or didn't receive the request body in time (408); safe to retry |
 | `ServerException` | any other error status, or a response that isn't laya-shaped or doesn't fit the decision class (a missing answer, another answer type, a label that isn't an enum case) |
 | `TransportException` | laya-serve couldn't be reached |
 
@@ -794,7 +803,7 @@ $laya->assertDecidedCount(Triage::class, 2);
 
 With `minConfidence`, the fake gates its answers the way laya-serve does, so `abstention`, `abstentionThreshold` and `lowConfidence` follow from the answers you register.
 
-The fake reports the model you pin as `routedModel`. Without one it reports `'multilingual'`, matching laya-serve's default for text whose language it can't identify.
+The fake reports the model you pin as `routedModel`, and as `route()`'s model. Without one it reports `'multilingual'`, matching laya-serve's default for text whose language it can't identify. `route()` isn't a prediction, so the assertions don't count it.
 
 If code asks a question you didn't register, or gives an answer that isn't one of the question's options, the fake throws.
 

@@ -78,8 +78,8 @@ class LayaServiceProvider extends ServiceProvider
         $client = HttpClient::create($timeout === null ? [] : ['timeout' => $timeout]);
 
         if ($retries > 0) {
-            // Only 503 (laya-serve at its concurrency limit) and transport errors are retried.
-            $client = new RetryableHttpClient($client, new GenericRetryStrategy([503]), $retries);
+            // Only 503 (laya-serve at its concurrency limit), 408 (body not received in time) and transport errors are retried.
+            $client = new RetryableHttpClient($client, new GenericRetryStrategy([408, 503]), $retries);
         }
 
         return new Psr18Client($client);
